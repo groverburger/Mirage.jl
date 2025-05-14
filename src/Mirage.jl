@@ -216,12 +216,12 @@ function ortho(left::Float32, right::Float32, bottom::Float32, top::Float32, zNe
     return mat
 end
 
-function update_projection_matrix(width, height)
+function update_projection_matrix(width, height, dpi_scaling::Number=1.0)
     global window_width, window_height, projection_matrix
     window_width = width
     window_height = height
     # Map pixel coords (0, width) -> (-1, 1) and (0, height) -> (1, -1)
-    projection_matrix = ortho(0.0f0, Float32(width), Float32(height), 0.0f0)
+    projection_matrix = ortho(0.0f0, Float32(width / dpi_scaling), Float32(height / dpi_scaling), 0.0f0)
     glViewport(0, 0, width, height)
 end
 
@@ -544,13 +544,13 @@ function julia_main()::Cint
     @info "DPI Scaling: $scale_x $scale_y"
 
     # Setup callbacks
-    GLFW.SetFramebufferSizeCallback(window, (_, w, h) -> update_projection_matrix(w, h))
+    GLFW.SetFramebufferSizeCallback(window, (_, w, h) -> update_projection_matrix(w, h, scale_x))
 
     # Enable VSync
     GLFW.SwapInterval(1)
 
     # Initial projection matrix setup
-    update_projection_matrix(window_width, window_height)
+    update_projection_matrix(window_width, window_height, scale_x)
 
     # Query and print OpenGL info
     @info "OpenGL Context Info:" create_context_info()
@@ -628,6 +628,7 @@ function julia_main()::Cint
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 
     circle = create_circle(100f0)
+    #circle = create_quad(100.0f0, 100.0f0)
 
     global terminate = function ()
         @info "Cleaning up resources..."
@@ -659,7 +660,7 @@ function julia_main()::Cint
             # Draw a solid green rectangle
             draw_rectangle(render_ctx, 200.0f0, 100.0f0, 50.0f0, 150.0f0, [0.0f0, 1.0f0, 0.0f0])
 
-            draw_mesh(render_ctx, circle, test_texture_id)
+            draw_mesh(render_ctx, circle, render_ctx.font_texture)
 
             # Draw the loaded texture (if available)
             if test_texture_id != 0
@@ -690,7 +691,8 @@ function julia_main()::Cint
 
             # --- End Frame ---
             GLFW.SwapBuffers(window)
-            GLFW.PollEvents()
+            #GLFW.PollEvents()
+            GLFW.WaitEvents()
 
             gl_check_error("end of frame $frame_count") # Check for errors each frame
         catch e

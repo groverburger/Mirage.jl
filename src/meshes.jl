@@ -33,7 +33,7 @@ function create_mesh(vertices::Vector{T},
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW)
 
     # Calculate stride (size of vertex in bytes)
-    stride = sizeof(T)
+    stride = sum([attr.size * sizeof(T) for attr in attributes])
 
     # Set up vertex attributes
     for attr in attributes
@@ -128,20 +128,36 @@ function draw_mesh(ctx::RenderContext, mesh::Mesh, texture_id::GLuint, tint_colo
     glUseProgram(ctx.texture_shader.program_id)
     glUniformMatrix4fv(ctx.texture_shader.uniform_locations["projection"], 1, GL_FALSE, projection_matrix)
     glUniform3f(ctx.texture_shader.uniform_locations["tintColor"], tint_color[1], tint_color[2], tint_color[3])
-    
+
     # Activate texture unit 0 and bind the texture
     glActiveTexture(GL_TEXTURE0)
     glBindTexture(GL_TEXTURE_2D, texture_id)
     glUniform1i(ctx.texture_shader.uniform_locations["textureSampler"], 0)
-    
+
     # Bind the mesh's VAO (which contains all vertex attribute configurations)
     glBindVertexArray(mesh.vao)
-    
+
     # Draw the mesh
     glDrawArrays(mesh.draw_mode, 0, mesh.vertex_count)
-    
+
     # Clean up state
     glBindTexture(GL_TEXTURE_2D, 0)
+    glBindVertexArray(0)
+    glUseProgram(0)
+end
+
+function draw_mesh(ctx::RenderContext, mesh::Mesh, tint_color::Vector{Float32}=[1.0f0, 1.0f0, 1.0f0])
+    glUseProgram(ctx.simple_shader.program_id)
+    glUniformMatrix4fv(ctx.simple_shader.uniform_locations["projection"], 1, GL_FALSE, projection_matrix)
+    glUniform3f(ctx.simple_shader.uniform_locations["objectColor"], tint_color[1], tint_color[2], tint_color[3])
+
+    # Bind the mesh's VAO (which contains all vertex attribute configurations)
+    glBindVertexArray(mesh.vao)
+
+    # Draw the mesh
+    glDrawArrays(mesh.draw_mode, 0, mesh.vertex_count)
+
+    # Clean up state
     glBindVertexArray(0)
     glUseProgram(0)
 end
@@ -177,80 +193,55 @@ end
 # Example: Create a quad mesh using triangles
 function create_quad(width::Float32, height::Float32)
     # Positions (x, y) and texture coordinates (u, v) for 6 vertices (2 triangles)
-    positions = [
-        [-width/2, -height/2],  # Bottom-left
-        [width/2, -height/2],   # Bottom-right
-        [width/2, height/2],    # Top-right
-        [-width/2, -height/2],  # Bottom-left (repeated)
-        [width/2, height/2],    # Top-right (repeated)
-        [-width/2, height/2]    # Top-left
+    x = width / 2
+    y = height / 2
+    vertices = Float32[
+        -x, -y, 0, 0,
+        x, -y, 1, 0,
+        -x, y, 0, 1,
+        x, -y, 1, 0,
+        -x, y, 0, 1,
+        x, y, 1, 1
     ]
 
-    # Texture coordinates (u, v)
-    uvs = [
-        [0.0, 0.0],  # Bottom-left
-        [1.0, 0.0],  # Bottom-right
-        [1.0, 1.0],  # Top-right
-        [0.0, 0.0],  # Bottom-left (repeated)
-        [1.0, 1.0],  # Top-right (repeated)
-        [0.0, 1.0]   # Top-left
+    # Define attributes for this format
+    attributes = [
+        VertexAttribute(0, 2, GL_FLOAT, false, 0),
+        VertexAttribute(1, 2, GL_FLOAT, false, 2 * sizeof(Float32))
     ]
 
-    return create_2d_textured_mesh(positions, uvs)
+    # Create mesh with 4 floats per vertex
+    return create_mesh(vertices, attributes)
 end
 
 function create_circle(radius::Float32, segments::Int = 32)
-    # We need segments + 2 vertices (center point + segments + 1 duplicate)
-    positions = Vector{Vector{Float32}}(undef, segments + 2)
-    uvs = Vector{Vector{Float32}}(undef, segments + 2)
-    
-    # Center point
-    positions[1] = [0.0f0, 0.0f0]
-    uvs[1] = [0.5f0, 0.5f0]  # Center of texture
-    
-    # Generate vertices around the circle
-    for i in 1:segments
-        angle = 2.0f0 * π * (i - 1) / segments
-        
-        # Position on circle
-        x = radius * cos(angle)
-        y = radius * sin(angle)
-        positions[i + 1] = [x, y]
-        
-        # UV coordinates based on cos/sin of angle
-        # Map from [-1,1] range to [0,1] range for texture coordinates
-        u = cos(angle) * 0.5f0 + 0.5f0
-        v = sin(angle) * 0.5f0 + 0.5f0
-        uvs[i + 1] = [u, v]
-    end
-    
-    # Add the first outer vertex again to close the circle
-    positions[segments + 2] = positions[2]
-    uvs[segments + 2] = uvs[2]
-    
     # Create triangles by connecting center to each pair of consecutive vertices
     # This creates a fan-like triangulation
-    vertices = Vector{Float32}()
+    vertices = Float32[]
+
     for i in 1:segments
+        angle::Float32 = 2.0f0 * π * (i - 1) / segments
+        next_angle::Float32 = 2.0f0 * π * i / segments
+
         # Center point
-        append!(vertices, positions[1])
-        append!(vertices, uvs[1])
-        
+        append!(vertices, 0.0f0, 0.0f0)
+        append!(vertices, 0.5f0, 0.5f0)
+
         # Current outer point
-        append!(vertices, positions[i + 1])
-        append!(vertices, uvs[i + 1])
-        
+        append!(vertices, radius * cos(angle), radius * sin(angle))
+        append!(vertices, cos(angle) * 0.5f0 + 0.5f0, sin(angle) * 0.5f0 + 0.5f0)
+
         # Next outer point
-        append!(vertices, positions[i + 2])
-        append!(vertices, uvs[i + 2])
+        append!(vertices, radius * cos(next_angle), radius * sin(next_angle))
+        append!(vertices, cos(next_angle) * 0.5f0 + 0.5f0, sin(next_angle) * 0.5f0 + 0.5f0)
     end
-    
+
     # Define attributes for this format
     attributes = [
         VertexAttribute(0, 2, GL_FLOAT, false, 0),                # Position (x, y)
         VertexAttribute(1, 2, GL_FLOAT, false, 2 * sizeof(Float32)) # Texcoord (u, v)
     ]
-    
+
     # Create mesh with 4 floats per vertex
     return create_mesh(vertices, attributes)
 end
