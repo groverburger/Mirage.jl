@@ -65,18 +65,18 @@ function gl_check_error(action_name="")
 end
 
 function create_shader(source, typ)
-    shader = glCreateShader(typ)::GLuint
+    shader::GLuint = glCreateShader(typ)
     if shader == 0
         error("Error creating shader: ", gl_error_message())
     end
     glShaderSource(shader, 1, convert(Ptr{UInt8}, pointer([convert(Ptr{GLchar}, pointer(source))])), C_NULL)
     glCompileShader(shader)
     !validate_shader(shader) && error("Shader compilation error: ", get_info_log(shader))
-    shader
+    return shader
 end
 
 function create_shader_program(f, vertex_shader, fragment_shader)
-    prog = glCreateProgram()
+    prog::GLuint = glCreateProgram()
     if prog == 0
         error("Error creating shader program: ", gl_error_message())
     end
@@ -93,7 +93,7 @@ function create_shader_program(f, vertex_shader, fragment_shader)
         glDeleteProgram(prog)
         error("Error linking shader program: ", log)
     end
-    prog
+    return prog
 end
 
 create_shader_program(vertex_shader, fragment_shader) = create_shader_program((prog)->nothing, vertex_shader, fragment_shader)
@@ -165,12 +165,13 @@ const texture_fragment_shader_source = """
 """
 
 # Simple struct to hold shader programs and uniform locations
-mutable struct ShaderInfo
+struct ShaderInfo
     program_id::GLuint
-    projection_loc::GLint
-    color_loc::GLint      # For simple shader
-    sampler_loc::GLint    # For texture shader
-    tint_loc::GLint       # For texture shader
+    uniform_locations::Dict{String, GLint}
+end
+
+function initialize_shader_uniform!(shader::ShaderInfo, uniform_name::String)
+    shader.uniform_locations[uniform_name] = glGetUniformLocation(shader.program_id, uniform_name)
 end
 
 # === New Helper Functions ===
@@ -314,19 +315,14 @@ function init_render_context()::RenderContext
     glDeleteShader(texture_vs)
     glDeleteShader(texture_fs)
 
-    simple_shader_info = ShaderInfo(
-        simple_program,
-        glGetUniformLocation(simple_program, "projection"),
-        glGetUniformLocation(simple_program, "objectColor"),
-        -1, -1 # Not used
-    )
-    texture_shader_info = ShaderInfo(
-        texture_program,
-        glGetUniformLocation(texture_program, "projection"),
-        -1, # Not used
-        glGetUniformLocation(texture_program, "textureSampler"),
-        glGetUniformLocation(texture_program, "tintColor")
-    )
+    simple_shader_info = ShaderInfo(simple_program, Dict{String, GLint}())
+    initialize_shader_uniform!(simple_shader_info, "projection")
+    initialize_shader_uniform!(simple_shader_info, "objectColor")
+
+    texture_shader_info = ShaderInfo(texture_program, Dict{String, GLint}())
+    initialize_shader_uniform!(texture_shader_info, "projection")
+    initialize_shader_uniform!(texture_shader_info, "textureSampler")
+    initialize_shader_uniform!(texture_shader_info, "tintColor")
 
     # Create VAO and VBO for dynamic drawing (shared)
     vao = gl_gen_vertex_array()
@@ -379,8 +375,8 @@ end
 # Draw a solid color rectangle
 function draw_rectangle(ctx::RenderContext, x::Float32, y::Float32, w::Float32, h::Float32, color::Vector{Float32})
     glUseProgram(ctx.simple_shader.program_id)
-    glUniformMatrix4fv(ctx.simple_shader.projection_loc, 1, GL_FALSE, projection_matrix)
-    glUniform3f(ctx.simple_shader.color_loc, color[1], color[2], color[3])
+    glUniformMatrix4fv(ctx.simple_shader.uniform_locations["projection"], 1, GL_FALSE, projection_matrix)
+    glUniform3f(ctx.simple_shader.uniform_locations["objectColor"], color[1], color[2], color[3])
 
     # Define vertices (x, y, u, v) - u,v are ignored by this shader but needed for shared VBO structure
     # Top-left, bottom-left, bottom-right, top-right (for two triangles)
@@ -409,12 +405,12 @@ end
 # Draw a textured rectangle
 function draw_textured_rectangle(ctx::RenderContext, x::Float32, y::Float32, w::Float32, h::Float32, texture_id::GLuint, tint_color::Vector{Float32}=[1.0f0, 1.0f0, 1.0f0])
     glUseProgram(ctx.texture_shader.program_id)
-    glUniformMatrix4fv(ctx.texture_shader.projection_loc, 1, GL_FALSE, projection_matrix)
-    glUniform3f(ctx.texture_shader.tint_loc, tint_color[1], tint_color[2], tint_color[3])
+    glUniformMatrix4fv(ctx.texture_shader.uniform_locations["projection"], 1, GL_FALSE, projection_matrix)
+    glUniform3f(ctx.texture_shader.uniform_locations["tintColor"], tint_color[1], tint_color[2], tint_color[3])
 
     glActiveTexture(GL_TEXTURE0) # Activate texture unit 0
     glBindTexture(GL_TEXTURE_2D, texture_id)
-    glUniform1i(ctx.texture_shader.sampler_loc, 0) # Tell sampler to use texture unit 0
+    glUniform1i(ctx.texture_shader.uniform_locations["textureSampler"], 0) # Tell sampler to use texture unit 0
 
     # Define vertices (x, y, u, v)
     # Note: Standard texture coords map (0,0) bottom-left, (1,1) top-right
@@ -444,12 +440,12 @@ end
 # Draw text using the loaded font atlas (simplified)
 function draw_text(ctx::RenderContext, text::String, x_start::Float32, y_start::Float32, scale::Float32, color::Vector{Float32})
     glUseProgram(ctx.texture_shader.program_id)
-    glUniformMatrix4fv(ctx.texture_shader.projection_loc, 1, GL_FALSE, projection_matrix)
-    glUniform3f(ctx.texture_shader.tint_loc, color[1], color[2], color[3])
+    glUniformMatrix4fv(ctx.texture_shader.uniform_locations["projection"], 1, GL_FALSE, projection_matrix)
+    glUniform3f(ctx.texture_shader.uniform_locations["tintColor"], color[1], color[2], color[3])
 
     glActiveTexture(GL_TEXTURE0)
     glBindTexture(GL_TEXTURE_2D, ctx.font_texture) # Use the font texture
-    glUniform1i(ctx.texture_shader.sampler_loc, 0)
+    glUniform1i(ctx.texture_shader.uniform_locations["textureSampler"], 0)
 
     glBindVertexArray(ctx.vao)
     glBindBuffer(GL_ARRAY_BUFFER, ctx.vbo)
@@ -587,6 +583,7 @@ function julia_main()::Cint
     end
 
     # --- Create and Render Makie Plot to Texture ---
+    #=
     makie_texture_id = GLuint(0)
     makie_plot_width_px = 300
     makie_plot_height_px = 200
@@ -610,6 +607,7 @@ function julia_main()::Cint
         println()
         # Continue without the Makie plot texture
     end
+    =#
     # --- End Makie Plot ---
 
     # --- Main Loop ---
