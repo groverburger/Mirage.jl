@@ -75,7 +75,7 @@ function create_shader(source, typ)
     return shader
 end
 
-function create_shader_program(f, vertex_shader, fragment_shader)
+function create_shader_program(vertex_shader, fragment_shader)
     prog::GLuint = glCreateProgram()
     if prog == 0
         error("Error creating shader program: ", gl_error_message())
@@ -84,7 +84,6 @@ function create_shader_program(f, vertex_shader, fragment_shader)
     gl_check_error("attaching vertex shader")
     glAttachShader(prog, fragment_shader)
     gl_check_error("attaching fragment shader")
-    f(prog) # Optional: Bind attribute locations before linking
     glLinkProgram(prog)
     status = GLint[0]
     glGetProgramiv(prog, GL_LINK_STATUS, status)
@@ -95,8 +94,6 @@ function create_shader_program(f, vertex_shader, fragment_shader)
     end
     return prog
 end
-
-create_shader_program(vertex_shader, fragment_shader) = create_shader_program((prog)->nothing, vertex_shader, fragment_shader)
 
 # === New Global State & Constants ===
 
@@ -178,7 +175,6 @@ end
 
 function create_context_info()
     global glsl_version
-    # ... (rest of the function is unchanged from original)
     glsl = split(unsafe_string(glGetString(GL_SHADING_LANGUAGE_VERSION)), ['.', ' '])
     if length(glsl) >= 2
         glsl_num = VersionNumber(parse(Int, glsl[1]), parse(Int, glsl[2]))
@@ -509,6 +505,8 @@ function draw_text(ctx::RenderContext, text::String, x_start::Float32, y_start::
     glUseProgram(0)
 end
 
+include("./meshes.jl")
+
 # === Main Application Logic ===
 
 function julia_main()::Cint
@@ -533,6 +531,17 @@ function julia_main()::Cint
     end
     GLFW.MakeContextCurrent(window)
     GLFW.ShowWindow(window)
+
+    # Get window size (in screen coordinates)
+    window_size = GLFW.GetWindowSize(window)
+
+    # Get framebuffer size (in pixels)
+    framebuffer_size = GLFW.GetFramebufferSize(window)
+
+    # Calculate scaling factor
+    scale_x = framebuffer_size.width / window_size.width
+    scale_y = framebuffer_size.height / window_size.height
+    @info "DPI Scaling: $scale_x $scale_y"
 
     # Setup callbacks
     GLFW.SetFramebufferSizeCallback(window, (_, w, h) -> update_projection_matrix(w, h))
@@ -618,6 +627,8 @@ function julia_main()::Cint
     glEnable(GL_BLEND)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 
+    circle = create_circle(100f0)
+
     global terminate = function ()
         @info "Cleaning up resources..."
         cleanup_render_context(render_ctx)
@@ -647,6 +658,8 @@ function julia_main()::Cint
 
             # Draw a solid green rectangle
             draw_rectangle(render_ctx, 200.0f0, 100.0f0, 50.0f0, 150.0f0, [0.0f0, 1.0f0, 0.0f0])
+
+            draw_mesh(render_ctx, circle, test_texture_id)
 
             # Draw the loaded texture (if available)
             if test_texture_id != 0
