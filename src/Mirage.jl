@@ -101,31 +101,7 @@ global glsl_version = ""
 global window_width = 800
 global window_height = 600
 global projection_matrix = Matrix{Float32}(I, 4, 4)
-
-# Shader sources
-const simple_vertex_shader_source = """
-    #version 330 core
-    layout (location = 0) in vec2 aPos;
-
-    uniform mat4 projection;
-
-    void main()
-    {
-        gl_Position = projection * vec4(aPos.x, aPos.y, 0.0, 1.0);
-    }
-"""
-
-const simple_fragment_shader_source = """
-    #version 330 core
-    out vec4 FragColor;
-
-    uniform vec3 objectColor;
-
-    void main()
-    {
-        FragColor = vec4(objectColor, 1.0);
-    }
-"""
+global model_matrix = Matrix{Float32}(I, 4, 4)
 
 const texture_vertex_shader_source = """
     #version 330 core
@@ -135,10 +111,11 @@ const texture_vertex_shader_source = """
     out vec2 TexCoord;
 
     uniform mat4 projection;
+    uniform mat4 model;
 
     void main()
     {
-        gl_Position = projection * vec4(aPos.x, aPos.y, 0.0, 1.0);
+        gl_Position = projection * model * vec4(aPos.x, aPos.y, 0.0, 1.0);
         TexCoord = aTexCoord;
     }
 """
@@ -286,10 +263,10 @@ end
 # === Drawing Interface ===
 
 mutable struct RenderContext
-    simple_shader::ShaderInfo
     texture_shader::ShaderInfo
     vao::GLuint
     vbo::GLuint
+    blank_texture::GLuint
     font_texture::GLuint
     char_width::Float32  # Assuming fixed width font atlas grid cell
     char_height::Float32 # Assuming fixed height font atlas grid cell
@@ -299,24 +276,15 @@ end
 
 function init_render_context()::RenderContext
     # Compile Shaders
-    simple_vs = create_shader(simple_vertex_shader_source, GL_VERTEX_SHADER)
-    simple_fs = create_shader(simple_fragment_shader_source, GL_FRAGMENT_SHADER)
-    simple_program = create_shader_program(simple_vs, simple_fs)
-    glDeleteShader(simple_vs)
-    glDeleteShader(simple_fs)
-
     texture_vs = create_shader(texture_vertex_shader_source, GL_VERTEX_SHADER)
     texture_fs = create_shader(texture_fragment_shader_source, GL_FRAGMENT_SHADER)
     texture_program = create_shader_program(texture_vs, texture_fs)
     glDeleteShader(texture_vs)
     glDeleteShader(texture_fs)
 
-    simple_shader_info = ShaderInfo(simple_program, Dict{String, GLint}())
-    initialize_shader_uniform!(simple_shader_info, "projection")
-    initialize_shader_uniform!(simple_shader_info, "objectColor")
-
     texture_shader_info = ShaderInfo(texture_program, Dict{String, GLint}())
     initialize_shader_uniform!(texture_shader_info, "projection")
+    initialize_shader_uniform!(texture_shader_info, "model")
     initialize_shader_uniform!(texture_shader_info, "textureSampler")
     initialize_shader_uniform!(texture_shader_info, "tintColor")
 
@@ -338,8 +306,8 @@ function init_render_context()::RenderContext
     # --- Font Setup (Simplified Placeholder) ---
     # In a real app, load a font atlas texture and metrics file (e.g., using FreeType)
     # Here, we'll just create a dummy 1x1 white texture and define some basic grid params
-    dummy_font_tex = gl_gen_texture()
-    glBindTexture(GL_TEXTURE_2D, dummy_font_tex)
+    blank_texture = gl_gen_texture()
+    glBindTexture(GL_TEXTURE_2D, blank_texture)
     white_pixel = Float32[1.0, 1.0, 1.0, 1.0]
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1, 1, 0, GL_RGBA, GL_FLOAT, white_pixel)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
@@ -350,17 +318,16 @@ function init_render_context()::RenderContext
     atlas_cols, atlas_rows = 16, 6
 
     return RenderContext(
-        simple_shader_info,
         texture_shader_info,
         vao, vbo,
-        dummy_font_tex, # Use dummy texture ID
+        blank_texture,
+        load_texture("./ascii_font_atlas.png"),
         char_w, char_h,
         atlas_cols, atlas_rows
     )
 end
 
 function cleanup_render_context(ctx::RenderContext)
-    glDeleteProgram(ctx.simple_shader.program_id)
     glDeleteProgram(ctx.texture_shader.program_id)
     glDeleteBuffers(1, [ctx.vbo])
     glDeleteVertexArrays(1, [ctx.vao])
@@ -369,39 +336,20 @@ end
 
 
 # Draw a solid color rectangle
-function draw_rectangle(ctx::RenderContext, x::Float32, y::Float32, w::Float32, h::Float32, color::Vector{Float32})
-    glUseProgram(ctx.simple_shader.program_id)
-    glUniformMatrix4fv(ctx.simple_shader.uniform_locations["projection"], 1, GL_FALSE, projection_matrix)
-    glUniform3f(ctx.simple_shader.uniform_locations["objectColor"], color[1], color[2], color[3])
-
-    # Define vertices (x, y, u, v) - u,v are ignored by this shader but needed for shared VBO structure
-    # Top-left, bottom-left, bottom-right, top-right (for two triangles)
-    vertices = GLfloat[
-        x, y,      0.0, 0.0,  # Top-left
-        x, y + h,  0.0, 1.0,  # Bottom-left
-        x + w, y + h,  1.0, 1.0,  # Bottom-right
-
-        x, y,      0.0, 0.0,  # Top-left
-        x + w, y + h,  1.0, 1.0,  # Bottom-right
-        x + w, y,      1.0, 0.0   # Top-right
-    ]
-
-    glBindVertexArray(ctx.vao)
-    glBindBuffer(GL_ARRAY_BUFFER, ctx.vbo)
-    # Upload data for this specific rectangle draw call
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW)
-
-    glDrawArrays(GL_TRIANGLES, 0, 6) # 6 vertices for 2 triangles
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0)
-    glBindVertexArray(0)
-    glUseProgram(0)
+function draw_rectangle(ctx::RenderContext,
+                        x::Float32,
+                        y::Float32,
+                        w::Float32,
+                        h::Float32,
+                        color::Vector{Float32})
+    draw_textured_rectangle(ctx, x, y, w, h, ctx.blank_texture, color)
 end
 
 # Draw a textured rectangle
 function draw_textured_rectangle(ctx::RenderContext, x::Float32, y::Float32, w::Float32, h::Float32, texture_id::GLuint, tint_color::Vector{Float32}=[1.0f0, 1.0f0, 1.0f0])
     glUseProgram(ctx.texture_shader.program_id)
     glUniformMatrix4fv(ctx.texture_shader.uniform_locations["projection"], 1, GL_FALSE, projection_matrix)
+    glUniformMatrix4fv(ctx.texture_shader.uniform_locations["model"], 1, GL_FALSE, model_matrix)
     glUniform3f(ctx.texture_shader.uniform_locations["tintColor"], tint_color[1], tint_color[2], tint_color[3])
 
     glActiveTexture(GL_TEXTURE0) # Activate texture unit 0
@@ -557,7 +505,7 @@ function julia_main()::Cint
 
     # Initialize render context (shaders, VAO/VBO)
     render_ctx = init_render_context()
-    render_ctx.font_texture = load_texture("./ascii_font_atlas.png")
+    #render_ctx.font_texture = 
 
     # --- Load Assets ---
     # Example: Load a texture (provide a path to an actual image file)
@@ -630,6 +578,12 @@ function julia_main()::Cint
     circle = create_circle(100f0)
     #circle = create_quad(100.0f0, 100.0f0)
 
+    global model_matrix
+    model_matrix[1, :] = [1, 0, 0, 0]
+    model_matrix[2, :] = [0, 1, 0, 0]
+    model_matrix[3, :] = [0, 0, 1, 0]
+    model_matrix[4, :] = [0, 0, 0, 1]
+
     global terminate = function ()
         @info "Cleaning up resources..."
         cleanup_render_context(render_ctx)
@@ -660,7 +614,11 @@ function julia_main()::Cint
             # Draw a solid green rectangle
             draw_rectangle(render_ctx, 200.0f0, 100.0f0, 50.0f0, 150.0f0, [0.0f0, 1.0f0, 0.0f0])
 
-            draw_mesh(render_ctx, circle, render_ctx.font_texture)
+            model_matrix[1, 4] = frame_count / 10
+            model_matrix[2, 4] = frame_count / 10
+            draw_mesh(render_ctx, circle)
+            model_matrix[1, 4] = 0
+            model_matrix[2, 4] = 0
 
             # Draw the loaded texture (if available)
             if test_texture_id != 0
@@ -691,8 +649,8 @@ function julia_main()::Cint
 
             # --- End Frame ---
             GLFW.SwapBuffers(window)
-            #GLFW.PollEvents()
-            GLFW.WaitEvents()
+            GLFW.PollEvents()
+            #GLFW.WaitEvents()
 
             gl_check_error("end of frame $frame_count") # Check for errors each frame
         catch e

@@ -15,10 +15,12 @@ mutable struct Mesh
     draw_mode::GLenum  # GL_TRIANGLES, etc.
     stride::Int        # Total bytes per vertex
     attributes::Vector{VertexAttribute}
+    is_dynamic::Bool
 end
 
 function create_mesh(vertices::Vector{T},
-                     attributes::Vector{VertexAttribute},
+                     attributes::Vector{VertexAttribute};
+                     is_dynamic::Bool = false,
                      draw_mode::GLenum = GL_TRIANGLES) where T
 
     # Create and bind VAO
@@ -30,7 +32,12 @@ function create_mesh(vertices::Vector{T},
     glBindBuffer(GL_ARRAY_BUFFER, vbo)
 
     # Upload vertex data
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW)
+    glBufferData(
+        GL_ARRAY_BUFFER,
+        sizeof(vertices),
+        vertices,
+        is_dynamic ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW
+    )
 
     # Calculate stride (size of vertex in bytes)
     stride = sum([attr.size * sizeof(T) for attr in attributes])
@@ -50,6 +57,7 @@ function create_mesh(vertices::Vector{T},
 
     # Unbind VAO to prevent accidental modification
     glBindVertexArray(0)
+    glBindBuffer(GL_ARRAY_BUFFER, 0)
 
     # Create and return mesh
     return Mesh(
@@ -58,8 +66,21 @@ function create_mesh(vertices::Vector{T},
         length(vertices),
         draw_mode,
         stride,
-        attributes
+        attributes,
+        is_dynamic
     )
+end
+
+function modify_vertices!(mesh::Mesh, vertices::Vector{Float32})
+    glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo)
+    glBufferData(
+        GL_ARRAY_BUFFER,
+        sizeof(vertices),
+        vertices,
+        mesh.is_dynamic ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW
+    )
+    glBindBuffer(GL_ARRAY_BUFFER, 0)
+    mesh.vertex_count = length(vertices)
 end
 
 # Helper to create a 2D textured mesh with triangles
@@ -127,6 +148,7 @@ draw_mesh(mesh::Mesh, shader_info::ShaderInfo) = draw_mesh(mesh, shader_info.pro
 function draw_mesh(ctx::RenderContext, mesh::Mesh, texture_id::GLuint, tint_color::Vector{Float32}=[1.0f0, 1.0f0, 1.0f0])
     glUseProgram(ctx.texture_shader.program_id)
     glUniformMatrix4fv(ctx.texture_shader.uniform_locations["projection"], 1, GL_FALSE, projection_matrix)
+    glUniformMatrix4fv(ctx.texture_shader.uniform_locations["model"], 1, GL_FALSE, model_matrix)
     glUniform3f(ctx.texture_shader.uniform_locations["tintColor"], tint_color[1], tint_color[2], tint_color[3])
 
     # Activate texture unit 0 and bind the texture
@@ -147,19 +169,7 @@ function draw_mesh(ctx::RenderContext, mesh::Mesh, texture_id::GLuint, tint_colo
 end
 
 function draw_mesh(ctx::RenderContext, mesh::Mesh, tint_color::Vector{Float32}=[1.0f0, 1.0f0, 1.0f0])
-    glUseProgram(ctx.simple_shader.program_id)
-    glUniformMatrix4fv(ctx.simple_shader.uniform_locations["projection"], 1, GL_FALSE, projection_matrix)
-    glUniform3f(ctx.simple_shader.uniform_locations["objectColor"], tint_color[1], tint_color[2], tint_color[3])
-
-    # Bind the mesh's VAO (which contains all vertex attribute configurations)
-    glBindVertexArray(mesh.vao)
-
-    # Draw the mesh
-    glDrawArrays(mesh.draw_mode, 0, mesh.vertex_count)
-
-    # Clean up state
-    glBindVertexArray(0)
-    glUseProgram(0)
+    draw_mesh(ctx, mesh, ctx.blank_texture, tint_color)
 end
 
 # Update vertex data (for dynamic meshes)
