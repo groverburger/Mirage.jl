@@ -93,7 +93,7 @@ draw_mesh(mesh::Mesh, shader_info::ShaderInfo) = draw_mesh(mesh, shader_info.pro
 function draw_mesh(mesh::Mesh, texture_id::GLuint, tint_color::Vector{Float32}=[1.0f0, 1.0f0, 1.0f0])
     ctx::RenderContext = get_context()
     glUseProgram(ctx.texture_shader.program_id)
-    glUniformMatrix4fv(ctx.texture_shader.uniform_locations["projection"], 1, GL_FALSE, projection_matrix)
+    glUniformMatrix4fv(ctx.texture_shader.uniform_locations["projection"], 1, GL_FALSE, get_context().projection)
     transform::Matrix = get_context().context_stack[end].transform
     glUniformMatrix4fv(ctx.texture_shader.uniform_locations["model"], 1, GL_FALSE, transform)
     glUniform3f(ctx.texture_shader.uniform_locations["tintColor"], tint_color[1], tint_color[2], tint_color[3])

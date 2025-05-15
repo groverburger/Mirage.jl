@@ -151,7 +151,6 @@ end
 # === New Global State & Constants ===
 
 global glsl_version = ""
-global projection_matrix = Matrix{Float32}(I, 4, 4)
 global immediate_mesh = nothing
 
 const texture_vertex_shader_source = """
@@ -245,11 +244,11 @@ function ortho(left::Float32, right::Float32, bottom::Float32, top::Float32, zNe
 end
 
 function update_projection_matrix(width, height, dpi_scaling::Number=1.0)
-    global window_width, window_height, projection_matrix
-    window_width = width
-    window_height = height
     # Map pixel coords (0, width) -> (-1, 1) and (0, height) -> (1, -1)
-    projection_matrix = ortho(0.0f0, Float32(width / dpi_scaling), Float32(height / dpi_scaling), 0.0f0)
+    ctx = get_context()
+    ctx.projection = ortho(0.0f0, Float32(width / dpi_scaling), Float32(height / dpi_scaling), 0.0f0)
+    ctx.window_width = width
+    ctx.window_height = height
     glViewport(0, 0, width, height)
 end
 
@@ -313,11 +312,13 @@ end
 
 # === Drawing Interface ===
 
-@kwdef struct ContextState
+@kwdef mutable struct ContextState
     transform::Matrix{Float32} = Float32[1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 1]
     fill_color::Tuple{Float32, Float32, Float32, Float32} = (1, 1, 1, 1)
     stroke_color::Tuple{Float32, Float32, Float32, Float32} = (0, 0, 0, 1)
     stroke_width::Int = 1
+    stroke_path::Vector{Tuple{Float32, Float32}} = Tuple{Float32, Float32}[]
+    stroke_cursor::Tuple{Float32, Float32} = (0, 0)
 end
 
 function clone(x::ContextState)
@@ -330,6 +331,9 @@ end
     texture_shader::ShaderInfo
     blank_texture::GLuint
     font_texture::GLuint
+    window_width::Int64 = 800
+    window_height::Int64 = 600
+    projection::Matrix{Float32} = ortho(0f0, 800f0, 600f0, 0f0)
     char_width::Float32  # Assuming fixed width font atlas grid cell
     char_height::Float32 # Assuming fixed height font atlas grid cell
     atlas_cols::Int      # Number of columns in font atlas grid
@@ -341,17 +345,102 @@ save() = push!(get_context().context_stack, clone(get_context().context_stack[en
 
 restore() = pop!(get_context().context_stack)
 
+get_state() = get_context().context_stack[end]
+
 function translate(dx::Number, dy::Number)
-    translate!(get_context().context_stack[end].transform, dx, dy)
+    translate!(get_state().transform, dx, dy)
 end
 
 function scale(dx::Number, dy::Number)
-    scale!(get_context().context_stack[end].transform, dx, dy)
+    scale!(get_state().transform, dx, dy)
 end
 scale(n::Number) = scale(n, n)
 
 function rotate(angle::Number)
-    rotate!(get_context().context_stack[end].transform, angle)
+    rotate!(get_state().transform, angle)
+end
+
+function begin_path()
+    empty!(get_state().stroke_path)
+end
+
+function moveto(x::Number, y::Number)
+    get_state().stroke_cursor = (Float32(x), Float32(y))
+end
+
+function lineto(x::Number, y::Number)
+    last_cursor::Tuple{Float32, Float32} = get_state().stroke_cursor
+    now_cursor::Tuple{Float32, Float32} = (Float32(x), Float32(y))
+    get_state().stroke_cursor = now_cursor
+    push!(get_state().stroke_path, last_cursor)
+    push!(get_state().stroke_path, now_cursor)
+end
+
+function strokecolor(tuple::Tuple{Number, Number, Number})
+    get_state().stroke_color = (
+        Float32(tuple[1]),
+        Float32(tuple[2]),
+        Float32(tuple[3]),
+        Float32(1)
+    )
+end
+
+function strokecolor(tuple::Tuple{Number, Number, Number, Number})
+    get_state().stroke_color = (
+        Float32(tuple[1]),
+        Float32(tuple[2]),
+        Float32(tuple[3]),
+        Float32(tuple[4])
+    )
+end
+
+function rgba(r::Int, g::Int, b::Int, a::Int = 255)::Tuple{Float32, Float32, Float32, Float32}
+    return (r / 255, g / 255, b / 255, a / 255)
+end
+
+function strokewidth(w::Int)
+    get_state().stroke_width = w
+end
+
+function stroke()
+    global immediate_mesh
+    state::ContextState = get_state()
+    for i in 1:2:length(state.stroke_path)
+        # Draw rectangle for line
+        (x1, y1) = state.stroke_path[i]
+        (x2, y2) = state.stroke_path[i + 1]
+        angle::Float64 = atan(y2 - y1, x2 - x1)
+        dx::Float32 = cos(angle + pi / 2) * state.stroke_width
+        dy::Float32 = sin(angle + pi / 2) * state.stroke_width
+        update_mesh_vertices!(immediate_mesh, Float32[
+            x1 + dx, y1 + dy, 0.0, 1.0,
+            x1 - dx, y1 - dy, 0.0, 0.0,
+            x2 + dx, y2 + dy, 1.0, 0.0,
+            x1 - dx, y1 - dy, 0.0, 1.0,
+            x2 + dx, y2 + dy, 1.0, 0.0,
+            x2 - dx, y2 - dy, 1.0, 1.0
+        ])
+        draw_mesh(immediate_mesh, get_context().blank_texture, [state.stroke_color...])
+
+        # Add simple elbows to join connecting lines
+        if i + 1 >= length(state.stroke_path); continue end
+        (x3, y3) = state.stroke_path[i + 2]
+        if x2 == x3 && y2 == y3
+            (x4, y4) = state.stroke_path[i + 3]
+            next_angle::Float64 = atan(y4 - y3, x4 - x3)
+            ndx::Float32 = cos(next_angle + pi / 2) * state.stroke_width
+            ndy::Float32 = sin(next_angle + pi / 2) * state.stroke_width
+            update_mesh_vertices!(immediate_mesh, Float32[
+                x2 + dx,  y2 + dy, 0.0, 1.0,
+                x2 - dx,  y2 - dy, 0.0, 0.0,
+                x2 + ndx, y2 + ndy, 1.0, 0.0,
+                x2 - dx,  y2 - dy, 0.0, 1.0,
+                x2 + ndx, y2 + ndy, 1.0, 0.0,
+                x2 - ndx, y2 - ndy, 1.0, 1.0
+            ])
+            draw_mesh(immediate_mesh, get_context().blank_texture, [state.stroke_color...])
+        end
+    end
 end
 
 const render_context = Ref{RenderContext}()
@@ -530,15 +619,6 @@ function initialize(;window_width::Int = 800, window_height::Int = 600)
     scale_y = framebuffer_size.height / window_size.height
     @info "DPI Scaling: $scale_x $scale_y"
 
-    # Setup callbacks
-    GLFW.SetFramebufferSizeCallback(window[], (_, w, h) -> update_projection_matrix(w, h, scale_x))
-
-    # Enable VSync
-    GLFW.SwapInterval(1)
-
-    # Initial projection matrix setup
-    update_projection_matrix(window_width, window_height, scale_x)
-
     # Query and print OpenGL info
     @info "OpenGL Context Info:" create_context_info()
 
@@ -549,6 +629,15 @@ function initialize(;window_width::Int = 800, window_height::Int = 600)
     # Initialize render context (shaders, VAO/VBO)
     render_ctx = init_render_context()
     render_context[] = render_ctx
+
+    # Setup callbacks
+    GLFW.SetFramebufferSizeCallback(window[], (_, w, h) -> update_projection_matrix(w, h, scale_x))
+
+    # Enable VSync
+    GLFW.SwapInterval(1)
+
+    # Initial projection matrix setup
+    update_projection_matrix(window_width, window_height, scale_x)
 
     global immediate_mesh
     immediate_mesh = create_mesh([0.0f0 for _ in 1:16])
@@ -700,6 +789,18 @@ function julia_main()::Cint
         draw_text("FPS: $fps") # White, normal size
         restore()
         draw_text("0123456789 ASCII /?!", 50.0f0, 450.0f0, 2.0f0, [0.0f0, 1.0f0, 1.0f0]) # Cyan
+
+        save()
+        moveto(100, 100)
+        lineto(200, 200)
+        lineto(300, 200)
+        lineto(350, 500)
+        moveto(500, 200)
+        lineto(500, 300)
+        strokewidth(2)
+        strokecolor(rgba(64, 128, 255, 255))
+        stroke()
+        restore()
 
         # --- Draw the Makie plot texture ---
         #=
