@@ -10,6 +10,59 @@ using Images
 #using CairoMakie
 # using Printf      # If needed for debugging text coords etc.
 
+function translate!(matrix::Matrix{T}, tx::Real, ty::Real) where T
+    # Create translation matrix
+    translation = T[1.0 0.0 0.0 tx;
+                   0.0 1.0 0.0 ty;
+                   0.0 0.0 1.0 0.0;
+                   0.0 0.0 0.0 1.0]
+    
+    # Perform in-place multiplication: matrix = translation * matrix
+    # We create a temporary matrix to hold the result
+    result = translation * matrix
+    
+    # Copy result back to matrix in-place
+    for i in 1:size(matrix, 1), j in 1:size(matrix, 2)
+        matrix[i, j] = result[i, j]
+    end
+    return matrix
+end
+
+function rotate!(matrix::Matrix{T}, angle::Real) where T
+    c = cos(angle)
+    s = sin(angle)
+    
+    # Create rotation matrix
+    rotation = T[c   -s   0.0  0.0;
+                s    c   0.0  0.0;
+                0.0  0.0  1.0  0.0;
+                0.0  0.0  0.0  1.0]
+    
+    # Apply rotation in-place
+    result = rotation * matrix
+    
+    for i in 1:size(matrix, 1), j in 1:size(matrix, 2)
+        matrix[i, j] = result[i, j]
+    end
+    return matrix
+end
+
+function scale!(matrix::Matrix{T}, sx::Real, sy::Real) where T
+    # Create scaling matrix
+    scaling = T[sx   0.0  0.0  0.0;
+               0.0  sy   0.0  0.0;
+               0.0  0.0  1.0  0.0;
+               0.0  0.0  0.0  1.0]
+    
+    # Apply scaling in-place
+    result = scaling * matrix
+    
+    for i in 1:size(matrix, 1), j in 1:size(matrix, 2)
+        matrix[i, j] = result[i, j]
+    end
+    return matrix
+end
+
 # === Existing OpenGL Helper Functions (Unchanged) ===
 
 function gl_gen_one(gl_gen_fn)
@@ -98,10 +151,7 @@ end
 # === New Global State & Constants ===
 
 global glsl_version = ""
-global window_width = 800
-global window_height = 600
 global projection_matrix = Matrix{Float32}(I, 4, 4)
-global model_matrix = Matrix{Float32}(I, 4, 4)
 global immediate_mesh = nothing
 
 const texture_vertex_shader_source = """
@@ -263,17 +313,49 @@ end
 
 # === Drawing Interface ===
 
-mutable struct RenderContext
+@kwdef struct ContextState
+    transform::Matrix{Float32} = Float32[1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 1]
+    fill_color::Tuple{Float32, Float32, Float32, Float32} = (1, 1, 1, 1)
+    stroke_color::Tuple{Float32, Float32, Float32, Float32} = (0, 0, 0, 1)
+    stroke_width::Int = 1
+end
+
+function clone(x::ContextState)
+    fields = fieldnames(ContextState)
+    kwargs = Dict{Symbol, Any}(field => deepcopy(getfield(x, field)) for field in fields)
+    return ContextState(; kwargs...)
+end
+
+@kwdef mutable struct RenderContext
     texture_shader::ShaderInfo
-    vao::GLuint
-    vbo::GLuint
     blank_texture::GLuint
     font_texture::GLuint
     char_width::Float32  # Assuming fixed width font atlas grid cell
     char_height::Float32 # Assuming fixed height font atlas grid cell
     atlas_cols::Int      # Number of columns in font atlas grid
     atlas_rows::Int      # Number of rows in font atlas grid
+    context_stack::Vector{ContextState}
 end
+
+save() = push!(get_context().context_stack, clone(get_context().context_stack[end]))
+
+restore() = pop!(get_context().context_stack)
+
+function translate(dx::Number, dy::Number)
+    translate!(get_context().context_stack[end].transform, dx, dy)
+end
+
+function scale(dx::Number, dy::Number)
+    scale!(get_context().context_stack[end].transform, dx, dy)
+end
+scale(n::Number) = scale(n, n)
+
+function rotate(angle::Number)
+    rotate!(get_context().context_stack[end].transform, angle)
+end
+
+const render_context = Ref{RenderContext}()
+get_context() = render_context[]
 
 function init_render_context()::RenderContext
     # Compile Shaders
@@ -283,71 +365,52 @@ function init_render_context()::RenderContext
     glDeleteShader(texture_vs)
     glDeleteShader(texture_fs)
 
-    texture_shader_info = ShaderInfo(texture_program, Dict{String, GLint}())
-    initialize_shader_uniform!(texture_shader_info, "projection")
-    initialize_shader_uniform!(texture_shader_info, "model")
-    initialize_shader_uniform!(texture_shader_info, "textureSampler")
-    initialize_shader_uniform!(texture_shader_info, "tintColor")
+    texture_shader = ShaderInfo(texture_program, Dict{String, GLint}())
+    initialize_shader_uniform!(texture_shader, "projection")
+    initialize_shader_uniform!(texture_shader, "model")
+    initialize_shader_uniform!(texture_shader, "textureSampler")
+    initialize_shader_uniform!(texture_shader, "tintColor")
 
-    # Create VAO and VBO for dynamic drawing (shared)
-    vao = gl_gen_vertex_array()
-    vbo = gl_gen_buffer()
-    glBindVertexArray(vao)
-    glBindBuffer(GL_ARRAY_BUFFER, vbo)
-    # Position attribute (vec2)
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), C_NULL)
-    glEnableVertexAttribArray(0)
-    # Texture coord attribute (vec2) - stride is 4 floats (pos.x, pos.y, tex.u, tex.v)
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), Ptr{Cvoid}(2 * sizeof(GLfloat)))
-    glEnableVertexAttribArray(1)
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0)
-    glBindVertexArray(0)
-
-    # --- Font Setup (Simplified Placeholder) ---
-    # In a real app, load a font atlas texture and metrics file (e.g., using FreeType)
-    # Here, we'll just create a dummy 1x1 white texture and define some basic grid params
     blank_texture = gl_gen_texture()
+    font_texture = load_texture("./ascii_font_atlas.png")
+
+    # --- Font Setup  ---
     glBindTexture(GL_TEXTURE_2D, blank_texture)
     white_pixel = Float32[1.0, 1.0, 1.0, 1.0]
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1, 1, 0, GL_RGBA, GL_FLOAT, white_pixel)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
     glBindTexture(GL_TEXTURE_2D, 0)
-    # Pretend we have a 16x8 grid font atlas (like ASCII)
-    char_w, char_h = 8.0f0, 14.0f0 # Example pixel dimensions of a character *cell*
+    char_width, char_height = 8.0f0, 14.0f0 # Pixel dimensions of a character cell
     atlas_cols, atlas_rows = 16, 6
 
-    return RenderContext(
-        texture_shader_info,
-        vao, vbo,
+    return RenderContext(;
+        texture_shader,
         blank_texture,
-        load_texture("./ascii_font_atlas.png"),
-        char_w, char_h,
-        atlas_cols, atlas_rows
+        font_texture,
+        char_width, char_height,
+        atlas_cols, atlas_rows,
+        context_stack = [ContextState()]
     )
 end
 
-function cleanup_render_context(ctx::RenderContext)
+function cleanup_render_context(ctx::RenderContext = get_context())
     glDeleteProgram(ctx.texture_shader.program_id)
-    glDeleteBuffers(1, [ctx.vbo])
-    glDeleteVertexArrays(1, [ctx.vao])
-    glDeleteTextures(1, [ctx.font_texture]) # Delete font texture too
+    glDeleteTextures(1, [ctx.blank_texture])
+    glDeleteTextures(1, [ctx.font_texture])
 end
 
 
 # Draw a solid color rectangle
-function draw_rectangle(ctx::RenderContext,
-                        x::Float32,
+function draw_rectangle(x::Float32,
                         y::Float32,
                         w::Float32,
                         h::Float32,
                         color::Vector{Float32})
-    draw_textured_rectangle(ctx, x, y, w, h, ctx.blank_texture, color)
+    draw_textured_rectangle(x, y, w, h, get_context().blank_texture, color)
 end
 
-function draw_textured_rectangle(ctx::RenderContext,
-                                 x::Float32,
+function draw_textured_rectangle(x::Float32,
                                  y::Float32,
                                  w::Float32,
                                  h::Float32,
@@ -362,24 +425,16 @@ function draw_textured_rectangle(ctx::RenderContext,
         x + w, y + h,  1.0, 0.0,  # Bottom-right
         x + w, y,      1.0, 1.0   # Top-right
     ])
-    draw_mesh(ctx, immediate_mesh, texture_id, tint_color)
+    draw_mesh(immediate_mesh, texture_id, tint_color)
 end
 
 # Draw text using the loaded font atlas (simplified)
-function draw_text(ctx::RenderContext, text::String, x_start::Float32, y_start::Float32, scale::Float32, color::Vector{Float32})
-    #=
-    glUseProgram(ctx.texture_shader.program_id)
-    glUniformMatrix4fv(ctx.texture_shader.uniform_locations["projection"], 1, GL_FALSE, projection_matrix)
-    glUniform3f(ctx.texture_shader.uniform_locations["tintColor"], color[1], color[2], color[3])
-
-    glActiveTexture(GL_TEXTURE0)
-    glBindTexture(GL_TEXTURE_2D, ctx.font_texture) # Use the font texture
-    glUniform1i(ctx.texture_shader.uniform_locations["textureSampler"], 0)
-
-    glBindVertexArray(ctx.vao)
-    glBindBuffer(GL_ARRAY_BUFFER, ctx.vbo)
-    =#
-
+function draw_text(text::String,
+                   x_start::Float32=0f0,
+                   y_start::Float32=0f0,
+                   scale::Float32=1f0,
+                   color::Vector{Float32}=[1f0, 1f0, 1f0, 1f0])
+    ctx::RenderContext = get_context()
     vertices = GLfloat[]
     x_cursor = x_start
 
@@ -428,27 +483,20 @@ function draw_text(ctx::RenderContext, text::String, x_start::Float32, y_start::
 
     if !isempty(vertices)
         # Upload all vertex data for the entire string at once
-        #glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW)
-        # Draw all characters
-        #glDrawArrays(GL_TRIANGLES, 0, length(vertices) ÷ 4) # 4 floats per vertex
         global immediate_mesh
         update_mesh_vertices!(immediate_mesh, vertices)
-        draw_mesh(ctx, immediate_mesh, ctx.font_texture, color)
+        # Draw all characters
+        draw_mesh(immediate_mesh, ctx.font_texture, color)
     end
-
-    #=
-    glBindTexture(GL_TEXTURE_2D, 0)
-    glBindBuffer(GL_ARRAY_BUFFER, 0)
-    glBindVertexArray(0)
-    glUseProgram(0)
-    =#
 end
 
 include("./meshes.jl")
 
 # === Main Application Logic ===
 
-function julia_main()::Cint
+const window = Ref{GLFW.Window}()
+
+function initialize(;window_width::Int = 800, window_height::Int = 600)
     # --- Initialization ---
     if !GLFW.Init()
         error("GLFW initialization failed")
@@ -462,20 +510,20 @@ function julia_main()::Cint
     GLFW.WindowHint(GLFW.OPENGL_FORWARD_COMPAT, GL_TRUE) # Required on macOS
 
     # Create a windowed mode window and its OpenGL context
-    window = GLFW.CreateWindow(window_width, window_height, "Julia OpenGL Shapes & Text Demo")
+    window[] = GLFW.CreateWindow(window_width, window_height, "Julia OpenGL Shapes & Text Demo")
     if window == C_NULL
         GLFW.Terminate()
         error("Failed to create GLFW window")
         return -1
     end
-    GLFW.MakeContextCurrent(window)
-    GLFW.ShowWindow(window)
+    GLFW.MakeContextCurrent(window[])
+    GLFW.ShowWindow(window[])
 
     # Get window size (in screen coordinates)
-    window_size = GLFW.GetWindowSize(window)
+    window_size = GLFW.GetWindowSize(window[])
 
     # Get framebuffer size (in pixels)
-    framebuffer_size = GLFW.GetFramebufferSize(window)
+    framebuffer_size = GLFW.GetFramebufferSize(window[])
 
     # Calculate scaling factor
     scale_x = framebuffer_size.width / window_size.width
@@ -483,7 +531,7 @@ function julia_main()::Cint
     @info "DPI Scaling: $scale_x $scale_y"
 
     # Setup callbacks
-    GLFW.SetFramebufferSizeCallback(window, (_, w, h) -> update_projection_matrix(w, h, scale_x))
+    GLFW.SetFramebufferSizeCallback(window[], (_, w, h) -> update_projection_matrix(w, h, scale_x))
 
     # Enable VSync
     GLFW.SwapInterval(1)
@@ -494,9 +542,54 @@ function julia_main()::Cint
     # Query and print OpenGL info
     @info "OpenGL Context Info:" create_context_info()
 
+    # Enable blending for text/texture transparency
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+
     # Initialize render context (shaders, VAO/VBO)
     render_ctx = init_render_context()
-    #render_ctx.font_texture = 
+    render_context[] = render_ctx
+
+    global immediate_mesh
+    immediate_mesh = create_mesh([0.0f0 for _ in 1:16])
+
+    global terminate = function ()
+        @info "Cleaning up resources..."
+        cleanup_render_context()
+        GLFW.DestroyWindow(window[])
+        GLFW.Terminate()
+        @info "Shutdown complete."
+    end
+
+    return window[]
+end
+
+function start_render_loop(render::Function; wait_for_events::Bool = false)
+    frame_count::Int64 = 0
+    while !GLFW.WindowShouldClose(window[])
+        try
+            frame_count += 1
+            render()
+            # --- End Frame ---
+            GLFW.SwapBuffers(window[])
+            if wait_for_events
+                GLFW.WaitEvents()
+            else
+                GLFW.PollEvents()
+            end
+            gl_check_error("end of frame $frame_count") # Check for errors each frame
+        catch e
+            println("Error in main loop: ", e)
+            showerror(stdout, e, catch_backtrace())
+            println()
+            sleep(0.5)
+        end
+    end
+    terminate()
+end
+
+function julia_main()::Cint
+    initialize()
 
     # --- Load Assets ---
     # Example: Load a texture (provide a path to an actual image file)
@@ -561,102 +654,64 @@ function julia_main()::Cint
     # --- Main Loop ---
     frame_count::Int64 = 0
     last_frame_time = time() # Initialize time measurement before the loop
-
-    # Enable blending for text/texture transparency
-    glEnable(GL_BLEND)
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-
     circle = create_circle(100f0)
-    #circle = create_quad(100.0f0, 100.0f0)
 
-    global model_matrix
-    model_matrix[1, :] = [1, 0, 0, 0]
-    model_matrix[2, :] = [0, 1, 0, 0]
-    model_matrix[3, :] = [0, 0, 1, 0]
-    model_matrix[4, :] = [0, 0, 0, 1]
+    start_render_loop(function ()
+        frame_count += 1
+        current_frame_time = time() # Get time at the start of the frame processing
+        delta_time = current_frame_time - last_frame_time
+        last_frame_time = current_frame_time
 
-    global immediate_mesh
-    immediate_mesh = create_mesh([0.0f0 for _ in 1:16])
+        # --- Rendering ---
+        bg_color = 0.1f0 # Gray background
+        glClearColor(bg_color, bg_color, bg_color, 1.0f0)
+        glClear(GL_COLOR_BUFFER_BIT)
 
-    global terminate = function ()
-        @info "Cleaning up resources..."
-        cleanup_render_context(render_ctx)
+        # Demo drawing calls:
+        # Draw a solid red rectangle
+        draw_rectangle(50.0f0, 50.0f0, 100.0f0, 80.0f0, [1.0f0, 0.0f0, 0.0f0])
+
+        # Draw a solid green rectangle
+        draw_rectangle(200.0f0, 100.0f0, 50.0f0, 150.0f0, [0.0f0, 1.0f0, 0.0f0])
+
+        save()
+        scale(sin(frame_count * 0.05) * 0.25 + 0.75)
+        save()
+        translate(frame_count / 2.5, frame_count / 5)
+        #draw_mesh(circle)
+        restore()
+        restore()
+
+        # Draw the loaded texture (if available)
         if test_texture_id != 0
-            glDeleteTextures(1, [test_texture_id])
+            # Full size
+            draw_textured_rectangle(50.0f0, 200.0f0, 150.0f0, 150.0f0, get_context().font_texture)
+            # Tinted blue and scaled
+            draw_textured_rectangle(250.0f0, 250.0f0, 100.0f0, 100.0f0, test_texture_id, [0.5f0, 0.5f0, 1.0f0])
         end
-        GLFW.DestroyWindow(window)
-        GLFW.Terminate()
-        @info "Shutdown complete."
-    end
 
-    while !GLFW.WindowShouldClose(window)
-        try
-            frame_count += 1
-            current_frame_time = time() # Get time at the start of the frame processing
-            delta_time = current_frame_time - last_frame_time
-            last_frame_time = current_frame_time
+        # Calculate FPS using delta_time (add epsilon to prevent division by zero)
+        fps = round(Int, 1.0 / (delta_time + 1e-9))
 
-            # --- Rendering ---
-            bg_color = 0.1f0 # Gray background
-            glClearColor(bg_color, bg_color, bg_color, 1.0f0)
-            glClear(GL_COLOR_BUFFER_BIT)
+        # Draw text (using the simplified font renderer)
+        draw_text("Hello Julia OpenGL!", 50.0f0, 400.0f0, 2.0f0, [1.0f0, 1.0f0, 0.0f0]) # Yellow, scaled up
+        save()
+        translate(10, 10)
+        draw_text("FPS: $fps") # White, normal size
+        restore()
+        draw_text("0123456789 ASCII /?!", 50.0f0, 450.0f0, 2.0f0, [0.0f0, 1.0f0, 1.0f0]) # Cyan
 
-            # Demo drawing calls:
-            # Draw a solid red rectangle
-            draw_rectangle(render_ctx, 50.0f0, 50.0f0, 100.0f0, 80.0f0, [1.0f0, 0.0f0, 0.0f0])
-
-            # Draw a solid green rectangle
-            draw_rectangle(render_ctx, 200.0f0, 100.0f0, 50.0f0, 150.0f0, [0.0f0, 1.0f0, 0.0f0])
-
-            model_matrix[1, 4] = frame_count / 10
-            model_matrix[2, 4] = frame_count / 10
-            draw_mesh(render_ctx, circle)
-            model_matrix[1, 4] = 0
-            model_matrix[2, 4] = 0
-
-            # Draw the loaded texture (if available)
-            if test_texture_id != 0
-                # Full size
-                draw_textured_rectangle(render_ctx, 50.0f0, 200.0f0, 150.0f0, 150.0f0, render_ctx.font_texture)
-                # Tinted blue and scaled
-                draw_textured_rectangle(render_ctx, 250.0f0, 250.0f0, 100.0f0, 100.0f0, test_texture_id, [0.5f0, 0.5f0, 1.0f0])
-            end
-
-            # Calculate FPS using delta_time (add epsilon to prevent division by zero)
-            fps = round(Int, 1.0 / (delta_time + 1e-9))
-
-            # Draw text (using the simplified font renderer)
-            draw_text(render_ctx, "Hello Julia OpenGL!", 50.0f0, 400.0f0, 2.0f0, [1.0f0, 1.0f0, 0.0f0]) # Yellow, scaled up
-            draw_text(render_ctx, "FPS: $fps", 10.0f0, 10.0f0, 1.0f0, [1.0f0, 1.0f0, 1.0f0]) # White, normal size
-            draw_text(render_ctx, "0123456789 ASCII /?!", 50.0f0, 450.0f0, 2.0f0, [0.0f0, 1.0f0, 1.0f0]) # Cyan
-
-            # --- Draw the Makie plot texture ---
-            #=
-            if makie_texture_id != 0
-                # Position it, e.g., top-right corner with a margin
-                plot_margin = 10.0f0
-                plot_x_pos = Float32(window_width) - Float32(makie_plot_width_px) * 2 - plot_margin
-                plot_y_pos = plot_margin
-                draw_textured_rectangle(render_ctx, plot_x_pos, plot_y_pos, Float32(makie_plot_width_px) * 2, Float32(makie_plot_height_px) * 2, makie_texture_id)
-            end
-            =#
-
-            # --- End Frame ---
-            GLFW.SwapBuffers(window)
-            GLFW.PollEvents()
-            #GLFW.WaitEvents()
-
-            gl_check_error("end of frame $frame_count") # Check for errors each frame
-        catch e
-            println("Error in main loop: ", e)
-            showerror(stdout, e, catch_backtrace())
-            println()
-            sleep(0.5)
-            #return 1
+        # --- Draw the Makie plot texture ---
+        #=
+        if makie_texture_id != 0
+        # Position it, e.g., top-right corner with a margin
+        plot_margin = 10.0f0
+        plot_x_pos = Float32(window_width) - Float32(makie_plot_width_px) * 2 - plot_margin
+        plot_y_pos = plot_margin
+        draw_textured_rectangle(render_ctx, plot_x_pos, plot_y_pos, Float32(makie_plot_width_px) * 2, Float32(makie_plot_height_px) * 2, makie_texture_id)
         end
-    end
-
-    terminate()
+        =#
+    end)
 
     return 0
 end

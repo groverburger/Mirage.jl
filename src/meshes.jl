@@ -79,6 +79,7 @@ function create_mesh(vertices::Vector{T},
     )
 end
 
+#=
 function draw_mesh(mesh::Mesh, shader_program::GLuint)
     glUseProgram(shader_program)
     glBindVertexArray(mesh.vao)
@@ -87,11 +88,14 @@ function draw_mesh(mesh::Mesh, shader_program::GLuint)
     glUseProgram(0)
 end
 draw_mesh(mesh::Mesh, shader_info::ShaderInfo) = draw_mesh(mesh, shader_info.program_id)
+=#
 
-function draw_mesh(ctx::RenderContext, mesh::Mesh, texture_id::GLuint, tint_color::Vector{Float32}=[1.0f0, 1.0f0, 1.0f0])
+function draw_mesh(mesh::Mesh, texture_id::GLuint, tint_color::Vector{Float32}=[1.0f0, 1.0f0, 1.0f0])
+    ctx::RenderContext = get_context()
     glUseProgram(ctx.texture_shader.program_id)
     glUniformMatrix4fv(ctx.texture_shader.uniform_locations["projection"], 1, GL_FALSE, projection_matrix)
-    glUniformMatrix4fv(ctx.texture_shader.uniform_locations["model"], 1, GL_FALSE, model_matrix)
+    transform::Matrix = get_context().context_stack[end].transform
+    glUniformMatrix4fv(ctx.texture_shader.uniform_locations["model"], 1, GL_FALSE, transform)
     glUniform3f(ctx.texture_shader.uniform_locations["tintColor"], tint_color[1], tint_color[2], tint_color[3])
 
     # Activate texture unit 0 and bind the texture
@@ -111,8 +115,9 @@ function draw_mesh(ctx::RenderContext, mesh::Mesh, texture_id::GLuint, tint_colo
     glUseProgram(0)
 end
 
-function draw_mesh(ctx::RenderContext, mesh::Mesh, tint_color::Vector{Float32}=[1.0f0, 1.0f0, 1.0f0])
-    draw_mesh(ctx, mesh, ctx.blank_texture, tint_color)
+function draw_mesh(mesh::Mesh, tint_color::Vector{Float32}=[1.0f0, 1.0f0, 1.0f0])
+    ctx::RenderContext = get_context()
+    draw_mesh(mesh, ctx.blank_texture, tint_color)
 end
 
 # Update vertex data (for dynamic meshes)
