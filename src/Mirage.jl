@@ -381,6 +381,7 @@ function cleanup_render_context(ctx::RenderContext = get_context())
     glDeleteProgram(ctx.texture_shader.program_id)
     glDeleteTextures(1, [ctx.blank_texture])
     glDeleteTextures(1, [ctx.font_texture])
+    global immediate_mesh = nothing
 end
 
 save() = push!(get_context().context_stack, clone(get_context().context_stack[end]))
