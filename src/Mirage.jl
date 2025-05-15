@@ -532,6 +532,14 @@ function fill()
     end
 end
 
+function rect(x::Number, y::Number, w::Number, h::Number)
+    moveto(x, y)
+    lineto(x + w, y)
+    lineto(x + w, y + h)
+    lineto(x, y + h)
+    lineto(x, y)
+end
+
 function circle(r::Number, x::Number = 0, y::Number = 0, segments::Int = 32)
     for i in 1:segments
         angle::Float32 = 2.0f0 * π * (i - 1) / segments
@@ -547,9 +555,36 @@ function circle(r::Number, x::Number = 0, y::Number = 0, segments::Int = 32)
     lineto(r * cos(1 / segments), r * sin(1 / segments))
 end
 
-# Draw a solid color rectangle
 function fillrect(x::Number, y::Number, w::Number, h::Number)
     drawimage(x, y, w, h, get_context().blank_texture)
+end
+
+function fillcircle(radius::Number, x::Number = 0, y::Number = 0, segments::Int = 32)
+    # Create triangles by connecting center to each pair of consecutive vertices
+    # This creates a fan-like triangulation
+    vertices = Float32[]
+
+    for i in 1:segments
+        angle::Float32 = 2.0f0 * π * (i - 1) / segments
+        next_angle::Float32 = 2.0f0 * π * i / segments
+
+        # Center point
+        append!(vertices, 0.0f0, 0.0f0)
+        append!(vertices, 0.5f0, 0.5f0)
+
+        # Current outer point
+        append!(vertices, radius * cos(angle), radius * sin(angle))
+        append!(vertices, cos(angle) * 0.5f0 + 0.5f0, sin(angle) * 0.5f0 + 0.5f0)
+
+        # Next outer point
+        append!(vertices, radius * cos(next_angle), radius * sin(next_angle))
+        append!(vertices, cos(next_angle) * 0.5f0 + 0.5f0, sin(next_angle) * 0.5f0 + 0.5f0)
+    end
+
+    immediate_mesh = get_immediate_mesh()
+    state::ContextState = get_state()
+    update_mesh_vertices!(immediate_mesh, vertices)
+    draw_mesh(immediate_mesh, get_context().blank_texture, [state.fill_color...])
 end
 
 function drawimage(x::Number,
@@ -832,10 +867,10 @@ function julia_main()::Cint
         translate(frame_count, frame_count)
         scale(sin(frame_count * 0.05) * 0.25 + 0.75)
         #draw_mesh(circle)
-        beginpath()
-        circle(100)
+        #beginpath()
         fillcolor(rgba(255, 255, 255, 100))
-        fill()
+        fillcircle(100)
+        #fill()
         restore()
 
         # Draw the loaded texture (if available)
@@ -918,6 +953,8 @@ export
     scale,
     drawimage,
     fillrect,
+    fillcircle,
+    rect,
     circle,
     Mesh,
     update_mesh_vertices,
