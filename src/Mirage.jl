@@ -19,7 +19,7 @@ function translate!(matrix::Matrix{T}, tx::Real, ty::Real) where T
     
     # Perform in-place multiplication: matrix = translation * matrix
     # We create a temporary matrix to hold the result
-    result = translation * matrix
+    result = matrix * translation
     
     # Copy result back to matrix in-place
     for i in 1:size(matrix, 1), j in 1:size(matrix, 2)
@@ -39,7 +39,7 @@ function rotate!(matrix::Matrix{T}, angle::Real) where T
                 0.0  0.0  0.0  1.0]
     
     # Apply rotation in-place
-    result = rotation * matrix
+    result = matrix * rotation
     
     for i in 1:size(matrix, 1), j in 1:size(matrix, 2)
         matrix[i, j] = result[i, j]
@@ -55,7 +55,7 @@ function scale!(matrix::Matrix{T}, sx::Real, sy::Real) where T
                0.0  0.0  0.0  1.0]
     
     # Apply scaling in-place
-    result = scaling * matrix
+    result = matrix * scaling
     
     for i in 1:size(matrix, 1), j in 1:size(matrix, 2)
         matrix[i, j] = result[i, j]
@@ -247,8 +247,6 @@ function update_projection_matrix(width, height, dpi_scaling::Number=1.0)
     # Map pixel coords (0, width) -> (-1, 1) and (0, height) -> (1, -1)
     ctx = get_context()
     ctx.projection = ortho(0.0f0, Float32(width / dpi_scaling), Float32(height / dpi_scaling), 0.0f0)
-    ctx.window_width = width
-    ctx.window_height = height
     glViewport(0, 0, width, height)
 end
 
@@ -327,23 +325,69 @@ function clone(x::ContextState)
     return ContextState(; kwargs...)
 end
 
-@kwdef mutable struct RenderContext
+const render_context = Ref{RenderContext}()
+
+mutable struct RenderContext
     texture_shader::ShaderInfo
     blank_texture::GLuint
     font_texture::GLuint
-    window_width::Int64 = 800
-    window_height::Int64 = 600
-    projection::Matrix{Float32} = ortho(0f0, 800f0, 600f0, 0f0)
+    projection::Matrix{Float32}
     char_width::Float32  # Assuming fixed width font atlas grid cell
     char_height::Float32 # Assuming fixed height font atlas grid cell
     atlas_cols::Int      # Number of columns in font atlas grid
     atlas_rows::Int      # Number of rows in font atlas grid
     context_stack::Vector{ContextState}
+
+    function RenderContext()::RenderContext
+        # Compile Shaders
+        texture_vs = create_shader(texture_vertex_shader_source, GL_VERTEX_SHADER)
+        texture_fs = create_shader(texture_fragment_shader_source, GL_FRAGMENT_SHADER)
+        texture_program = create_shader_program(texture_vs, texture_fs)
+        glDeleteShader(texture_vs)
+        glDeleteShader(texture_fs)
+
+        texture_shader = ShaderInfo(texture_program, Dict{String, GLint}())
+        initialize_shader_uniform!(texture_shader, "projection")
+        initialize_shader_uniform!(texture_shader, "model")
+        initialize_shader_uniform!(texture_shader, "textureSampler")
+        initialize_shader_uniform!(texture_shader, "tintColor")
+
+        blank_texture = gl_gen_texture()
+        font_texture = load_texture("./ascii_font_atlas.png")
+
+        # --- Font Setup  ---
+        glBindTexture(GL_TEXTURE_2D, blank_texture)
+        white_pixel = Float32[1.0, 1.0, 1.0, 1.0]
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1, 1, 0, GL_RGBA, GL_FLOAT, white_pixel)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+        glBindTexture(GL_TEXTURE_2D, 0)
+        char_width, char_height = 8.0f0, 14.0f0 # Pixel dimensions of a character cell
+        atlas_cols, atlas_rows = 16, 6
+
+        return new(
+            texture_shader,
+            blank_texture,
+            font_texture,
+            ortho(0f0, 800f0, 600f0, 0f0),
+            char_width, char_height,
+            atlas_cols, atlas_rows,
+            [ContextState()]
+        )
+    end
+end
+
+function cleanup_render_context(ctx::RenderContext = get_context())
+    glDeleteProgram(ctx.texture_shader.program_id)
+    glDeleteTextures(1, [ctx.blank_texture])
+    glDeleteTextures(1, [ctx.font_texture])
 end
 
 save() = push!(get_context().context_stack, clone(get_context().context_stack[end]))
 
 restore() = pop!(get_context().context_stack)
+
+get_context() = render_context[]
 
 get_state() = get_context().context_stack[end]
 
@@ -376,6 +420,24 @@ function lineto(x::Number, y::Number)
     push!(get_state().stroke_path, now_cursor)
 end
 
+function fillcolor(tuple::Tuple{Number, Number, Number})
+    get_state().fill_color = (
+        Float32(tuple[1]),
+        Float32(tuple[2]),
+        Float32(tuple[3]),
+        Float32(1)
+    )
+end
+
+function fillcolor(tuple::Tuple{Number, Number, Number, Number})
+    get_state().fill_color = (
+        Float32(tuple[1]),
+        Float32(tuple[2]),
+        Float32(tuple[3]),
+        Float32(tuple[4])
+    )
+end
+
 function strokecolor(tuple::Tuple{Number, Number, Number})
     get_state().stroke_color = (
         Float32(tuple[1]),
@@ -403,7 +465,7 @@ function strokewidth(w::Int)
 end
 
 function stroke()
-    global immediate_mesh
+    immediate_mesh = get_immediate_mesh()
     state::ContextState = get_state()
     for i in 1:2:length(state.stroke_path)
         # Draw rectangle for line
@@ -443,69 +505,59 @@ function stroke()
     end
 end
 
-const render_context = Ref{RenderContext}()
-get_context() = render_context[]
+function fill()
+    immediate_mesh = get_immediate_mesh()
+    state::ContextState = get_state()
 
-function init_render_context()::RenderContext
-    # Compile Shaders
-    texture_vs = create_shader(texture_vertex_shader_source, GL_VERTEX_SHADER)
-    texture_fs = create_shader(texture_fragment_shader_source, GL_FRAGMENT_SHADER)
-    texture_program = create_shader_program(texture_vs, texture_fs)
-    glDeleteShader(texture_vs)
-    glDeleteShader(texture_fs)
+    unique_points = unique(state.stroke_path)
+    x3::Number = 0
+    y3::Number = 0
+    for (x, y) in unique_points
+        x3 += x
+        y3 += y
+    end
+    x3 /= length(unique_points)
+    y3 /= length(unique_points)
 
-    texture_shader = ShaderInfo(texture_program, Dict{String, GLint}())
-    initialize_shader_uniform!(texture_shader, "projection")
-    initialize_shader_uniform!(texture_shader, "model")
-    initialize_shader_uniform!(texture_shader, "textureSampler")
-    initialize_shader_uniform!(texture_shader, "tintColor")
-
-    blank_texture = gl_gen_texture()
-    font_texture = load_texture("./ascii_font_atlas.png")
-
-    # --- Font Setup  ---
-    glBindTexture(GL_TEXTURE_2D, blank_texture)
-    white_pixel = Float32[1.0, 1.0, 1.0, 1.0]
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1, 1, 0, GL_RGBA, GL_FLOAT, white_pixel)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
-    glBindTexture(GL_TEXTURE_2D, 0)
-    char_width, char_height = 8.0f0, 14.0f0 # Pixel dimensions of a character cell
-    atlas_cols, atlas_rows = 16, 6
-
-    return RenderContext(;
-        texture_shader,
-        blank_texture,
-        font_texture,
-        char_width, char_height,
-        atlas_cols, atlas_rows,
-        context_stack = [ContextState()]
-    )
+    for i in 1:2:length(state.stroke_path)
+        # Draw rectangle for line
+        (x1, y1) = state.stroke_path[i]
+        (x2, y2) = state.stroke_path[i + 1]
+        update_mesh_vertices!(immediate_mesh, Float32[
+            x1, y1, 0.0, 1.0,
+            x2, y2, 0.0, 0.0,
+            x3, y3, 1.0, 0.0
+        ])
+        draw_mesh(immediate_mesh, get_context().blank_texture, [state.fill_color...])
+    end
 end
 
-function cleanup_render_context(ctx::RenderContext = get_context())
-    glDeleteProgram(ctx.texture_shader.program_id)
-    glDeleteTextures(1, [ctx.blank_texture])
-    glDeleteTextures(1, [ctx.font_texture])
+function circle(r::Number, x::Number = 0, y::Number = 0, segments::Int = 32)
+    for i in 1:segments
+        angle::Float32 = 2.0f0 * π * (i - 1) / segments
+        next_angle::Float32 = 2.0f0 * π * i / segments
+        x::Float32 = r * cos(angle)
+        y::Float32 = r * sin(angle)
+        if i == 1
+            moveto(x, y)
+        else
+            lineto(x, y)
+        end
+    end
+    lineto(r * cos(1 / segments), r * sin(1 / segments))
 end
-
 
 # Draw a solid color rectangle
-function draw_rectangle(x::Float32,
-                        y::Float32,
-                        w::Float32,
-                        h::Float32,
-                        color::Vector{Float32})
-    draw_textured_rectangle(x, y, w, h, get_context().blank_texture, color)
+function fillrect(x::Number, y::Number, w::Number, h::Number)
+    drawimage(x, y, w, h, get_context().blank_texture)
 end
 
-function draw_textured_rectangle(x::Float32,
-                                 y::Float32,
-                                 w::Float32,
-                                 h::Float32,
-                                 texture_id::GLuint,
-                                 tint_color::Vector{Float32}=[1.0f0, 1.0f0, 1.0f0])
-    global immediate_mesh
+function drawimage(x::Number,
+                   y::Number,
+                   w::Number,
+                   h::Number,
+                   texture_id::GLuint)
+    immediate_mesh = get_immediate_mesh()
     update_mesh_vertices!(immediate_mesh, Float32[
         x, y,          0.0, 1.0,  # Top-left
         x, y + h,      0.0, 0.0,  # Bottom-left
@@ -514,18 +566,14 @@ function draw_textured_rectangle(x::Float32,
         x + w, y + h,  1.0, 0.0,  # Bottom-right
         x + w, y,      1.0, 1.0   # Top-right
     ])
-    draw_mesh(immediate_mesh, texture_id, tint_color)
+    draw_mesh(immediate_mesh, texture_id, [get_state().fill_color...])
 end
 
 # Draw text using the loaded font atlas (simplified)
-function draw_text(text::String,
-                   x_start::Float32=0f0,
-                   y_start::Float32=0f0,
-                   scale::Float32=1f0,
-                   color::Vector{Float32}=[1f0, 1f0, 1f0, 1f0])
+function text(text::String)
     ctx::RenderContext = get_context()
     vertices = GLfloat[]
-    x_cursor = x_start
+    x_cursor = 0f0
 
     # Simplified: Assume ASCII, fixed grid, no bearing/kerning
     atlas_cell_w_uv = 1.0f0 / ctx.atlas_cols
@@ -546,10 +594,10 @@ function draw_text(text::String,
             v1 = v0 + atlas_cell_h_uv
 
             # Calculate screen position and size for this character's quad
-            char_render_w = ctx.char_width * scale
-            char_render_h = ctx.char_height * scale
+            char_render_w = ctx.char_width
+            char_render_h = ctx.char_height
             xpos = x_cursor
-            ypos = y_start # Simple baseline alignment
+            ypos = 0f0 # Simple baseline alignment
 
             # Define quad vertices (x, y, u, v) - 6 vertices for 2 triangles
             append!(vertices, GLfloat[
@@ -566,17 +614,25 @@ function draw_text(text::String,
             x_cursor += char_render_w
         else
             # Skip non-ASCII or handle differently
-            x_cursor += (ctx.char_width * scale) # Advance by space width
+            x_cursor += ctx.char_width # Advance by space width
         end
     end
 
     if !isempty(vertices)
         # Upload all vertex data for the entire string at once
-        global immediate_mesh
+        immediate_mesh = get_immediate_mesh()
         update_mesh_vertices!(immediate_mesh, vertices)
         # Draw all characters
-        draw_mesh(immediate_mesh, ctx.font_texture, color)
+        draw_mesh(immediate_mesh, ctx.font_texture, [get_state().fill_color...])
     end
+end
+
+function get_immediate_mesh()
+    global immediate_mesh
+    if immediate_mesh == nothing
+        immediate_mesh = create_mesh([0.0f0 for _ in 1:16])
+    end
+    return immediate_mesh
 end
 
 include("./meshes.jl")
@@ -626,9 +682,7 @@ function initialize(;window_width::Int = 800, window_height::Int = 600)
     glEnable(GL_BLEND)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 
-    # Initialize render context (shaders, VAO/VBO)
-    render_ctx = init_render_context()
-    render_context[] = render_ctx
+    render_context[] = RenderContext()
 
     # Setup callbacks
     GLFW.SetFramebufferSizeCallback(window[], (_, w, h) -> update_projection_matrix(w, h, scale_x))
@@ -638,9 +692,6 @@ function initialize(;window_width::Int = 800, window_height::Int = 600)
 
     # Initial projection matrix setup
     update_projection_matrix(window_width, window_height, scale_x)
-
-    global immediate_mesh
-    immediate_mesh = create_mesh([0.0f0 for _ in 1:16])
 
     global terminate = function ()
         @info "Cleaning up resources..."
@@ -743,7 +794,7 @@ function julia_main()::Cint
     # --- Main Loop ---
     frame_count::Int64 = 0
     last_frame_time = time() # Initialize time measurement before the loop
-    circle = create_circle(100f0)
+    #circle = create_circle(100f0)
 
     start_render_loop(function ()
         frame_count += 1
@@ -754,41 +805,65 @@ function julia_main()::Cint
         # --- Rendering ---
         bg_color = 0.1f0 # Gray background
         glClearColor(bg_color, bg_color, bg_color, 1.0f0)
-        glClear(GL_COLOR_BUFFER_BIT)
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT)
 
         # Demo drawing calls:
         # Draw a solid red rectangle
-        draw_rectangle(50.0f0, 50.0f0, 100.0f0, 80.0f0, [1.0f0, 0.0f0, 0.0f0])
+        save()
+        fillcolor(rgba(255, 0, 0, 255))
+        fillrect(50.0f0, 50.0f0, 100.0f0, 80.0f0)
+        restore()
 
         # Draw a solid green rectangle
-        draw_rectangle(200.0f0, 100.0f0, 50.0f0, 150.0f0, [0.0f0, 1.0f0, 0.0f0])
+        save()
+        fillcolor(rgba(0, 255, 0, 255))
+        fillrect(200.0f0, 100.0f0, 50.0f0, 150.0f0)
+        restore()
 
         save()
+        translate(frame_count, frame_count)
         scale(sin(frame_count * 0.05) * 0.25 + 0.75)
-        save()
-        translate(frame_count / 2.5, frame_count / 5)
         #draw_mesh(circle)
-        restore()
+        begin_path()
+        circle(100)
+        fillcolor(rgba(255, 255, 255, 100))
+        fill()
         restore()
 
         # Draw the loaded texture (if available)
         if test_texture_id != 0
             # Full size
-            draw_textured_rectangle(50.0f0, 200.0f0, 150.0f0, 150.0f0, get_context().font_texture)
+            drawimage(50.0f0, 200.0f0, 150.0f0, 150.0f0, get_context().font_texture)
             # Tinted blue and scaled
-            draw_textured_rectangle(250.0f0, 250.0f0, 100.0f0, 100.0f0, test_texture_id, [0.5f0, 0.5f0, 1.0f0])
+            save()
+            translate(250.0f0, 250.0f0)
+            scale(10)
+            drawimage(0, 0, 0100.0f0, 100.0f0, test_texture_id)
+            restore()
         end
 
         # Calculate FPS using delta_time (add epsilon to prevent division by zero)
         fps = round(Int, 1.0 / (delta_time + 1e-9))
 
         # Draw text (using the simplified font renderer)
-        draw_text("Hello Julia OpenGL!", 50.0f0, 400.0f0, 2.0f0, [1.0f0, 1.0f0, 0.0f0]) # Yellow, scaled up
+        save()
+        translate(50, 400)
+        scale(2)
+        fillcolor(rgba(255, 255, 0, 255))
+        text("Hello Julia OpenGL!") # Yellow, scaled up
+        restore()
+
         save()
         translate(10, 10)
-        draw_text("FPS: $fps") # White, normal size
+        text("FPS: $fps") # White, normal size
         restore()
-        draw_text("0123456789 ASCII /?!", 50.0f0, 450.0f0, 2.0f0, [0.0f0, 1.0f0, 1.0f0]) # Cyan
+
+        save()
+        translate(50, 450)
+        scale(2)
+        fillcolor(rgba(20, 200, 255, 255))
+        text("0123456789 ASCII /?!") # Cyan
+        restore()
 
         save()
         moveto(100, 100)
@@ -818,7 +893,25 @@ function julia_main()::Cint
 end
 
 # Exported function already snake_case
-export julia_main
+export
+    save,
+    restore,
+    moveto,
+    lineto,
+    fill,
+    stroke,
+    strokecolor,
+    fillcolor,
+    rgba,
+    strokewidth,
+    text,
+    translate,
+    rotate,
+    scale,
+    RenderContext,
+    load_texture,
+    initialize,
+    start_render_loop
 
 end # module GraphicsTest
 
