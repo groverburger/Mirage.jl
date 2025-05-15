@@ -15,12 +15,21 @@ mutable struct Mesh
     draw_mode::GLenum  # GL_TRIANGLES, etc.
     stride::Int        # Total bytes per vertex
     attributes::Vector{VertexAttribute}
-    is_dynamic::Bool
 end
 
+get_default_attributes() = [
+    VertexAttribute(0, 2, GL_FLOAT, false, 0),
+    VertexAttribute(1, 2, GL_FLOAT, false, 2 * sizeof(Float32))
+]
+
+get_default_3d_attributes() = [
+    VertexAttribute(0, 3, GL_FLOAT, false, 0),                   # Position (x, y, z)
+    VertexAttribute(2, 2, GL_FLOAT, false, 6 * sizeof(Float32)), # Texcoord (u, v)
+    VertexAttribute(1, 3, GL_FLOAT, false, 3 * sizeof(Float32))  # Normal (nx, ny, nz)
+]
+
 function create_mesh(vertices::Vector{T},
-                     attributes::Vector{VertexAttribute};
-                     is_dynamic::Bool = false,
+                     attributes::Vector{VertexAttribute} = get_default_attributes();
                      draw_mode::GLenum = GL_TRIANGLES) where T
 
     # Create and bind VAO
@@ -36,7 +45,7 @@ function create_mesh(vertices::Vector{T},
         GL_ARRAY_BUFFER,
         sizeof(vertices),
         vertices,
-        is_dynamic ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW
+        GL_STATIC_DRAW
     )
 
     # Calculate stride (size of vertex in bytes)
@@ -66,80 +75,14 @@ function create_mesh(vertices::Vector{T},
         length(vertices),
         draw_mode,
         stride,
-        attributes,
-        is_dynamic
+        attributes
     )
 end
 
-function modify_vertices!(mesh::Mesh, vertices::Vector{Float32})
-    glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo)
-    glBufferData(
-        GL_ARRAY_BUFFER,
-        sizeof(vertices),
-        vertices,
-        mesh.is_dynamic ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW
-    )
-    glBindBuffer(GL_ARRAY_BUFFER, 0)
-    mesh.vertex_count = length(vertices)
-end
-
-# Helper to create a 2D textured mesh with triangles
-function create_2d_textured_mesh(positions::Vector{Vector{Float32}},
-                                 uvs::Vector{Vector{Float32}})
-
-    # Create interleaved vertex data
-    vertices = Vector{Float32}()
-    for i in 1:length(positions)
-        # Position (x, y)
-        append!(vertices, positions[i])
-        # Texture coordinates (u, v)
-        append!(vertices, uvs[i])
-    end
-
-    # Define attributes for this format
-    attributes = [
-        VertexAttribute(0, 2, GL_FLOAT, false, 0),                # Position (x, y)
-        VertexAttribute(1, 2, GL_FLOAT, false, 2 * sizeof(Float32)) # Texcoord (u, v)
-    ]
-
-    # Create mesh with 4 floats per vertex
-    return create_mesh(vertices, attributes)
-end
-
-# Helper to create a 3D mesh with position, normal, and texture coordinates
-function create_3d_mesh(positions::Vector{Vector{Float32}},
-                        normals::Vector{Vector{Float32}},
-                        uvs::Vector{Vector{Float32}})
-
-    # Create interleaved vertex data
-    vertices = Vector{Float32}()
-    for i in 1:length(positions)
-        # Position (x, y, z)
-        append!(vertices, positions[i])
-        # Texture coordinates (u, v)
-        append!(vertices, uvs[i])
-        # Normal (nx, ny, nz)
-        append!(vertices, normals[i])
-    end
-
-    # Define attributes for this format
-    attributes = [
-        VertexAttribute(0, 3, GL_FLOAT, false, 0),                   # Position (x, y, z)
-        VertexAttribute(2, 2, GL_FLOAT, false, 6 * sizeof(Float32)), # Texcoord (u, v)
-        VertexAttribute(1, 3, GL_FLOAT, false, 3 * sizeof(Float32))  # Normal (nx, ny, nz)
-    ]
-
-    # Create mesh with 8 floats per vertex
-    return create_mesh(vertices, attributes)
-end
-
-# Draw a mesh
 function draw_mesh(mesh::Mesh, shader_program::GLuint)
     glUseProgram(shader_program)
     glBindVertexArray(mesh.vao)
-
     glDrawArrays(mesh.draw_mode, 0, mesh.vertex_count)
-
     glBindVertexArray(0)
     glUseProgram(0)
 end
@@ -173,12 +116,11 @@ function draw_mesh(ctx::RenderContext, mesh::Mesh, tint_color::Vector{Float32}=[
 end
 
 # Update vertex data (for dynamic meshes)
-function update_mesh_vertices(mesh::Mesh, vertices::Vector{T}, usage::GLenum = GL_DYNAMIC_DRAW) where T
+function update_mesh_vertices!(mesh::Mesh, vertices::Vector{T}, usage::GLenum = GL_DYNAMIC_DRAW) where T
     glBindVertexArray(mesh.vao)
     glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo)
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, usage)
     glBindVertexArray(0)
-
     mesh.vertex_count = length(vertices)
 end
 
@@ -214,14 +156,7 @@ function create_quad(width::Float32, height::Float32)
         x, y, 1, 1
     ]
 
-    # Define attributes for this format
-    attributes = [
-        VertexAttribute(0, 2, GL_FLOAT, false, 0),
-        VertexAttribute(1, 2, GL_FLOAT, false, 2 * sizeof(Float32))
-    ]
-
-    # Create mesh with 4 floats per vertex
-    return create_mesh(vertices, attributes)
+    return create_mesh(vertices)
 end
 
 function create_circle(radius::Float32, segments::Int = 32)
@@ -246,12 +181,5 @@ function create_circle(radius::Float32, segments::Int = 32)
         append!(vertices, cos(next_angle) * 0.5f0 + 0.5f0, sin(next_angle) * 0.5f0 + 0.5f0)
     end
 
-    # Define attributes for this format
-    attributes = [
-        VertexAttribute(0, 2, GL_FLOAT, false, 0),                # Position (x, y)
-        VertexAttribute(1, 2, GL_FLOAT, false, 2 * sizeof(Float32)) # Texcoord (u, v)
-    ]
-
-    # Create mesh with 4 floats per vertex
-    return create_mesh(vertices, attributes)
+    return create_mesh(vertices)
 end

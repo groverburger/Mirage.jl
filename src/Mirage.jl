@@ -102,6 +102,7 @@ global window_width = 800
 global window_height = 600
 global projection_matrix = Matrix{Float32}(I, 4, 4)
 global model_matrix = Matrix{Float32}(I, 4, 4)
+global immediate_mesh = nothing
 
 const texture_vertex_shader_source = """
     #version 330 core
@@ -345,44 +346,28 @@ function draw_rectangle(ctx::RenderContext,
     draw_textured_rectangle(ctx, x, y, w, h, ctx.blank_texture, color)
 end
 
-# Draw a textured rectangle
-function draw_textured_rectangle(ctx::RenderContext, x::Float32, y::Float32, w::Float32, h::Float32, texture_id::GLuint, tint_color::Vector{Float32}=[1.0f0, 1.0f0, 1.0f0])
-    glUseProgram(ctx.texture_shader.program_id)
-    glUniformMatrix4fv(ctx.texture_shader.uniform_locations["projection"], 1, GL_FALSE, projection_matrix)
-    glUniformMatrix4fv(ctx.texture_shader.uniform_locations["model"], 1, GL_FALSE, model_matrix)
-    glUniform3f(ctx.texture_shader.uniform_locations["tintColor"], tint_color[1], tint_color[2], tint_color[3])
-
-    glActiveTexture(GL_TEXTURE0) # Activate texture unit 0
-    glBindTexture(GL_TEXTURE_2D, texture_id)
-    glUniform1i(ctx.texture_shader.uniform_locations["textureSampler"], 0) # Tell sampler to use texture unit 0
-
-    # Define vertices (x, y, u, v)
-    # Note: Standard texture coords map (0,0) bottom-left, (1,1) top-right
-    # If your image loading flips, adjust UV coords accordingly. Assumes standard coords here.
-    vertices = GLfloat[
-        x, y,      0.0, 1.0,  # Top-left
-        x, y + h,  0.0, 0.0,  # Bottom-left
+function draw_textured_rectangle(ctx::RenderContext,
+                                 x::Float32,
+                                 y::Float32,
+                                 w::Float32,
+                                 h::Float32,
+                                 texture_id::GLuint,
+                                 tint_color::Vector{Float32}=[1.0f0, 1.0f0, 1.0f0])
+    global immediate_mesh
+    update_mesh_vertices!(immediate_mesh, Float32[
+        x, y,          0.0, 1.0,  # Top-left
+        x, y + h,      0.0, 0.0,  # Bottom-left
         x + w, y + h,  1.0, 0.0,  # Bottom-right
-
-        x, y,      0.0, 1.0,  # Top-left
+        x, y,          0.0, 1.0,  # Top-left
         x + w, y + h,  1.0, 0.0,  # Bottom-right
         x + w, y,      1.0, 1.0   # Top-right
-    ]
-
-    glBindVertexArray(ctx.vao)
-    glBindBuffer(GL_ARRAY_BUFFER, ctx.vbo)
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW)
-
-    glDrawArrays(GL_TRIANGLES, 0, 6)
-
-    glBindTexture(GL_TEXTURE_2D, 0) # Unbind texture
-    glBindBuffer(GL_ARRAY_BUFFER, 0)
-    glBindVertexArray(0)
-    glUseProgram(0)
+    ])
+    draw_mesh(ctx, immediate_mesh, texture_id, tint_color)
 end
 
 # Draw text using the loaded font atlas (simplified)
 function draw_text(ctx::RenderContext, text::String, x_start::Float32, y_start::Float32, scale::Float32, color::Vector{Float32})
+    #=
     glUseProgram(ctx.texture_shader.program_id)
     glUniformMatrix4fv(ctx.texture_shader.uniform_locations["projection"], 1, GL_FALSE, projection_matrix)
     glUniform3f(ctx.texture_shader.uniform_locations["tintColor"], color[1], color[2], color[3])
@@ -393,6 +378,7 @@ function draw_text(ctx::RenderContext, text::String, x_start::Float32, y_start::
 
     glBindVertexArray(ctx.vao)
     glBindBuffer(GL_ARRAY_BUFFER, ctx.vbo)
+    =#
 
     vertices = GLfloat[]
     x_cursor = x_start
@@ -442,15 +428,20 @@ function draw_text(ctx::RenderContext, text::String, x_start::Float32, y_start::
 
     if !isempty(vertices)
         # Upload all vertex data for the entire string at once
-        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW)
+        #glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW)
         # Draw all characters
-        glDrawArrays(GL_TRIANGLES, 0, length(vertices) ÷ 4) # 4 floats per vertex
+        #glDrawArrays(GL_TRIANGLES, 0, length(vertices) ÷ 4) # 4 floats per vertex
+        global immediate_mesh
+        update_mesh_vertices!(immediate_mesh, vertices)
+        draw_mesh(ctx, immediate_mesh, ctx.font_texture, color)
     end
 
+    #=
     glBindTexture(GL_TEXTURE_2D, 0)
     glBindBuffer(GL_ARRAY_BUFFER, 0)
     glBindVertexArray(0)
     glUseProgram(0)
+    =#
 end
 
 include("./meshes.jl")
@@ -583,6 +574,9 @@ function julia_main()::Cint
     model_matrix[2, :] = [0, 1, 0, 0]
     model_matrix[3, :] = [0, 0, 1, 0]
     model_matrix[4, :] = [0, 0, 0, 1]
+
+    global immediate_mesh
+    immediate_mesh = create_mesh([0.0f0 for _ in 1:16])
 
     global terminate = function ()
         @info "Cleaning up resources..."
