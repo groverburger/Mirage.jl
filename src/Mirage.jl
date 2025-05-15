@@ -325,8 +325,6 @@ function clone(x::ContextState)
     return ContextState(; kwargs...)
 end
 
-const render_context = Ref{RenderContext}()
-
 mutable struct RenderContext
     texture_shader::ShaderInfo
     blank_texture::GLuint
@@ -376,6 +374,8 @@ mutable struct RenderContext
         )
     end
 end
+
+const render_context = Ref{RenderContext}()
 
 function cleanup_render_context(ctx::RenderContext = get_context())
     glDeleteProgram(ctx.texture_shader.program_id)
