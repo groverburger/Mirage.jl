@@ -900,7 +900,6 @@ function julia_main()::Cint
     return 0
 end
 
-# Exported function already snake_case
 export
     save,
     restore,
@@ -916,9 +915,16 @@ export
     translate,
     rotate,
     scale,
+    drawimage,
+    fillrect,
+    circle,
+    Mesh,
+    update_mesh_vertices,
+    draw_mesh,
     RenderContext,
     set_render_context,
     initialize_render_context,
+    update_projection_matrix,
     load_texture,
     initialize,
     start_render_loop
