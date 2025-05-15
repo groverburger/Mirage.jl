@@ -253,7 +253,7 @@ function load_texture(filepath::String)::GLuint
     try
         img = FileIO.load(filepath)
         img_rgba = convert(Matrix{RGBA{N0f8}}, img) |> transpose
-        return load_texture(img_rgba)
+        return load_texture(map(x -> RGBA{N0f8}(x.alpha, x.b, x.g, x.r), img_rgba))
     catch e
         println("Error loading texture '$filepath': ", e)
         rethrow(e)
