@@ -177,14 +177,13 @@ const texture_fragment_shader_source = """
     in vec2 TexCoord;
 
     uniform sampler2D textureSampler;
-    uniform vec3 tintColor;
+    uniform vec4 tintColor;
 
     void main()
     {
-        vec4 texColor = texture(textureSampler, TexCoord);
-        // Ensure transparent areas in texture remain transparent, tint opaque areas
-        FragColor = vec4(texColor.rgb * tintColor, texColor.a);
-        // For simple tinting without transparency: FragColor = texture(textureSampler, TexCoord) * vec4(tintColor, 1.0);
+        vec4 texColor = texture(textureSampler, TexCoord) * tintColor;
+        if (texColor.a == 0.0) { discard; }
+        FragColor = texColor;
     }
 """
 
@@ -814,7 +813,7 @@ function julia_main()::Cint
         # --- Rendering ---
         bg_color = 0.1f0 # Gray background
         glClearColor(bg_color, bg_color, bg_color, 1.0f0)
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT)
+        glClear(GL_COLOR_BUFFER_BIT)
 
         # Demo drawing calls:
         # Draw a solid red rectangle
@@ -858,7 +857,7 @@ function julia_main()::Cint
         save()
         translate(50, 400)
         scale(2)
-        fillcolor(rgba(255, 255, 0, 255))
+        fillcolor(rgba(255, 255, 0, 200))
         text("Hello Julia OpenGL!") # Yellow, scaled up
         restore()
 
