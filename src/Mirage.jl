@@ -314,7 +314,7 @@ end
     transform::Matrix{Float32} = Float32[1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 1]
     fill_color::Tuple{Float32, Float32, Float32, Float32} = (1, 1, 1, 1)
     stroke_color::Tuple{Float32, Float32, Float32, Float32} = (0, 0, 0, 1)
-    stroke_width::Int = 1
+    stroke_width::Float32 = 1
     stroke_path::Vector{Tuple{Float32, Float32}} = Tuple{Float32, Float32}[]
     stroke_cursor::Tuple{Float32, Float32} = (0, 0)
 end
@@ -404,7 +404,7 @@ function rotate(angle::Number)
     rotate!(get_state().transform, angle)
 end
 
-function begin_path()
+function beginpath()
     empty!(get_state().stroke_path)
 end
 
@@ -460,7 +460,7 @@ function rgba(r::Int, g::Int, b::Int, a::Int = 255)::Tuple{Float32, Float32, Flo
     return (r / 255, g / 255, b / 255, a / 255)
 end
 
-function strokewidth(w::Int)
+function strokewidth(w::Number)
     get_state().stroke_width = w
 end
 
@@ -832,7 +832,7 @@ function julia_main()::Cint
         translate(frame_count, frame_count)
         scale(sin(frame_count * 0.05) * 0.25 + 0.75)
         #draw_mesh(circle)
-        begin_path()
+        beginpath()
         circle(100)
         fillcolor(rgba(255, 255, 255, 100))
         fill()
@@ -905,6 +905,7 @@ export
     restore,
     moveto,
     lineto,
+    beginpath,
     fill,
     stroke,
     strokecolor,
