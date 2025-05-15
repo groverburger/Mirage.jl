@@ -641,6 +641,14 @@ include("./meshes.jl")
 
 const window = Ref{GLFW.Window}()
 
+function set_render_context(ctx::RenderContext)
+    render_context[] = ctx
+end
+
+function initialize_render_context()
+    set_render_context(RenderContext())
+end
+
 function initialize(;window_width::Int = 800, window_height::Int = 600)
     # --- Initialization ---
     if !GLFW.Init()
@@ -682,7 +690,7 @@ function initialize(;window_width::Int = 800, window_height::Int = 600)
     glEnable(GL_BLEND)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 
-    render_context[] = RenderContext()
+    initialize_render_context()
 
     # Setup callbacks
     GLFW.SetFramebufferSizeCallback(window[], (_, w, h) -> update_projection_matrix(w, h, scale_x))
@@ -909,6 +917,8 @@ export
     rotate,
     scale,
     RenderContext,
+    set_render_context,
+    initialize_render_context,
     load_texture,
     initialize,
     start_render_loop
