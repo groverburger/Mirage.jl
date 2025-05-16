@@ -467,6 +467,8 @@ end
 function stroke()
     immediate_mesh = get_immediate_mesh()
     state::ContextState = get_state()
+    vertices::Vector{Float32} = Float32[]
+
     for i in 1:2:length(state.stroke_path)
         # Draw rectangle for line
         (x1, y1) = state.stroke_path[i]
@@ -474,7 +476,7 @@ function stroke()
         angle::Float64 = atan(y2 - y1, x2 - x1)
         dx::Float32 = cos(angle + pi / 2) * state.stroke_width
         dy::Float32 = sin(angle + pi / 2) * state.stroke_width
-        update_mesh_vertices!(immediate_mesh, Float32[
+        append!(vertices, Float32[
             x1 + dx, y1 + dy, 0.0, 1.0,
             x1 - dx, y1 - dy, 0.0, 0.0,
             x2 + dx, y2 + dy, 1.0, 0.0,
@@ -482,17 +484,18 @@ function stroke()
             x2 + dx, y2 + dy, 1.0, 0.0,
             x2 - dx, y2 - dy, 1.0, 1.0
         ])
-        draw_mesh(immediate_mesh, get_context().blank_texture, [state.stroke_color...])
 
         # Add simple elbows to join connecting lines
-        if i + 1 >= length(state.stroke_path); continue end
+        if i + 1 >= length(state.stroke_path);
+            continue
+        end
         (x3, y3) = state.stroke_path[i + 2]
         if x2 == x3 && y2 == y3
             (x4, y4) = state.stroke_path[i + 3]
             next_angle::Float64 = atan(y4 - y3, x4 - x3)
             ndx::Float32 = cos(next_angle + pi / 2) * state.stroke_width
             ndy::Float32 = sin(next_angle + pi / 2) * state.stroke_width
-            update_mesh_vertices!(immediate_mesh, Float32[
+            append!(vertices, Float32[
                 x2 + dx,  y2 + dy, 0.0, 1.0,
                 x2 - dx,  y2 - dy, 0.0, 0.0,
                 x2 + ndx, y2 + ndy, 1.0, 0.0,
@@ -500,9 +503,11 @@ function stroke()
                 x2 + ndx, y2 + ndy, 1.0, 0.0,
                 x2 - ndx, y2 - ndy, 1.0, 1.0
             ])
-            draw_mesh(immediate_mesh, get_context().blank_texture, [state.stroke_color...])
         end
     end
+
+    update_mesh_vertices!(immediate_mesh, vertices)
+    draw_mesh(immediate_mesh, get_context().blank_texture, [state.stroke_color...])
 end
 
 function fill()
