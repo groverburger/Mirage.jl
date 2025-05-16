@@ -126,7 +126,7 @@ function update_mesh_vertices!(mesh::Mesh, vertices::Vector{T}, usage::GLenum = 
     glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo)
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, usage)
     glBindVertexArray(0)
-    mesh.vertex_count = length(vertices)
+    mesh.vertex_count = div(length(vertices), 4)  # Assuming 4 floats per vertex
 end
 
 # Destroy mesh and free GPU resources
