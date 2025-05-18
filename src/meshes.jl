@@ -28,7 +28,7 @@ get_default_3d_attributes() = [
     VertexAttribute(1, 3, GL_FLOAT, false, 3 * sizeof(Float32))  # Normal (nx, ny, nz)
 ]
 
-function create_mesh(vertices::Vector{T},
+function create_mesh(vertices::Vector{T} = Float32[0, 0, 0, 0],
                      attributes::Vector{VertexAttribute} = get_default_attributes();
                      draw_mode::GLenum = GL_TRIANGLES) where T
 
@@ -125,6 +125,7 @@ function update_mesh_vertices!(mesh::Mesh, vertices::Vector{T}, usage::GLenum = 
     glBindVertexArray(mesh.vao)
     glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo)
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, usage)
+    glBindBuffer(GL_ARRAY_BUFFER, 0)
     glBindVertexArray(0)
     mesh.vertex_count = div(length(vertices), 4)  # Assuming 4 floats per vertex
 end

@@ -467,6 +467,10 @@ end
 function stroke()
     immediate_mesh = get_immediate_mesh()
     state::ContextState = get_state()
+    if length(state.stroke_path) < 2
+        @debug "Skipping stroke with insufficient path points"
+        return
+    end
     vertices::Vector{Float32} = Float32[]
 
     for i in 1:2:length(state.stroke_path)
@@ -669,8 +673,9 @@ end
 
 function get_immediate_mesh()
     global immediate_mesh
-    if immediate_mesh == nothing
-        immediate_mesh = create_mesh([0.0f0 for _ in 1:16])
+    if immediate_mesh == nothing || immediate_mesh.vao == 0
+        @debug "Creating new immediate mesh"
+        immediate_mesh = create_mesh()
     end
     return immediate_mesh
 end
