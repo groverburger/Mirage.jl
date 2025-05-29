@@ -253,7 +253,7 @@ function load_texture(filepath::String)::GLuint
     try
         img = FileIO.load(filepath)
         img_rgba = convert(Matrix{RGBA{N0f8}}, img) |> transpose
-        return load_texture(map(x -> RGBA{N0f8}(x.alpha, x.b, x.g, x.r), img_rgba))
+        return load_texture(img_rgba)
     catch e
         println("Error loading texture '$filepath': ", e)
         rethrow(e)
@@ -276,7 +276,7 @@ function load_texture(img_rgba::Matrix{RGBA{N0f8}})::GLuint
     end
 
     # Transpose and flip
-    img_flipped = reverse(img_float32, dims=1) # Flip vertically
+    #img_flipped = reverse(img_float32, dims=1) # Flip vertically
 
     tex_id = gl_gen_texture()
     glBindTexture(GL_TEXTURE_2D, tex_id)
@@ -296,7 +296,7 @@ function load_texture(img_rgba::Matrix{RGBA{N0f8}})::GLuint
 
     # Upload the image data
     # Use GL_RGBA32F for Float32 RGBA data
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, tex_width, tex_height, 0, GL_RGBA, GL_FLOAT, img_flipped)
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, tex_width, tex_height, 0, GL_RGBA, GL_FLOAT, img_float32)
     gl_check_error("uploading texture data")
 
     # Generate mipmaps
