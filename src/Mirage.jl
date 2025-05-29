@@ -494,7 +494,7 @@ function stroke()
             continue
         end
         (x3, y3) = state.stroke_path[i + 2]
-        if x2 == x3 && y2 == y3
+        if isapprox(x2, x3) && isapprox(y2, y3)
             (x4, y4) = state.stroke_path[i + 3]
             next_angle::Float64 = atan(y4 - y3, x4 - x3)
             ndx::Float32 = cos(next_angle + pi / 2) * state.stroke_width
@@ -790,7 +790,7 @@ function julia_main()::Cint
     test_texture_id = GLuint(0)
     try
         # IMPORTANT: Replace with the actual path to your image file
-        test_texture_path = "test_texture.png" # Example path
+        test_texture_path = "testimage.jpg" # Example path
         if isfile(test_texture_path)
             test_texture_id = load_texture(test_texture_path)
             @info "Loaded test texture: $test_texture_path (ID: $test_texture_id)"
