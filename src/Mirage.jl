@@ -252,7 +252,7 @@ end
 function load_texture(filepath::String)::GLuint
     try
         img = FileIO.load(filepath)
-        img_rgba = convert(Matrix{RGBA{N0f8}}, img) |> transpose
+        img_rgba = convert(Matrix{RGBA{N0f8}}, img)
         return load_texture(img_rgba)
     catch e
         println("Error loading texture '$filepath': ", e)
@@ -260,50 +260,32 @@ function load_texture(filepath::String)::GLuint
     end
 end
 
-function load_texture(img_rgba::Matrix{RGBA{N0f8}})::GLuint
-    # Extract color components as Float32
-    tex_width, tex_height = size(img_rgba)
-    img_float32 = zeros(Float32, 4, tex_width, tex_height)  # Pre-allocate
+function load_texture(img_rgba::Matrix{Images.RGBA{Images.N0f8}})::GLuint
+    tex_height, tex_width = size(img_rgba)
 
-    for y in 1:tex_height
-        for x in 1:tex_width
-            color = img_rgba[x, tex_height - y + 1]
-            img_float32[1, x, y] = Float32(color.r)  # Red component
-            img_float32[2, x, y] = Float32(color.g)  # Green component
-            img_float32[3, x, y] = Float32(color.b)  # Blue component
-            img_float32[4, x, y] = Float32(color.alpha) # Alpha component
-        end
-    end
+    # Combine flip and transpose in a single operation
+    output_img = permutedims(img_rgba[end:-1:1, :], (2, 1))
 
-    # Transpose and flip
-    #img_flipped = reverse(img_float32, dims=1) # Flip vertically
+    # Convert to bytes
+    output_bytes = vec(reinterpret(UInt8, output_img))
 
-    tex_id = gl_gen_texture()
+    # OpenGL texture creation
+    tex_id = Mirage.gl_gen_texture()
     glBindTexture(GL_TEXTURE_2D, tex_id)
     gl_check_error("binding texture")
 
-    # Set texture wrapping parameters
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
     gl_check_error("setting wrap parameters")
 
-    # Set texture filtering parameters
-    #glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR) # Use mipmaps for minification
-    #glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR) # Linear for magnification
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST) # Use mipmaps for minification
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST) # Linear for magnification
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
     gl_check_error("setting filter parameters")
 
-    # Upload the image data
-    # Use GL_RGBA32F for Float32 RGBA data
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, tex_width, tex_height, 0, GL_RGBA, GL_FLOAT, img_float32)
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, tex_width, tex_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, output_bytes)
+    glBindTexture(GL_TEXTURE_2D, 0)
     gl_check_error("uploading texture data")
 
-    # Generate mipmaps
-    #glGenerateMipmap(GL_TEXTURE_2D)
-    gl_check_error("generating mipmaps")
-
-    glBindTexture(GL_TEXTURE_2D, 0) # Unbind
     return tex_id
 end
 
