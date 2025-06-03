@@ -3,25 +3,18 @@ module Mirage
 import GLFW
 using ModernGL
 using Revise
-using LinearAlgebra # For matrix operations
-using FileIO        # For loading images
-using ImageIO       # For loading images (implicitly used by FileIO)
+using FileIO
+using ImageIO
 using Images
-#using CairoMakie
-# using Printf      # If needed for debugging text coords etc.
 
-function translate!(matrix::Matrix{T}, tx::Real, ty::Real) where T
-    # Create translation matrix
-    translation = T[1.0 0.0 0.0 tx;
-                   0.0 1.0 0.0 ty;
-                   0.0 0.0 1.0 0.0;
-                   0.0 0.0 0.0 1.0]
-    
-    # Perform in-place multiplication: matrix = translation * matrix
-    # We create a temporary matrix to hold the result
+function translate!(matrix::Matrix{T}, tx::Real, ty::Real, tz::Real = 0.0) where T
+    translation = T[
+        1.0 0.0 0.0 tx;
+        0.0 1.0 0.0 ty;
+        0.0 0.0 1.0 tz;
+        0.0 0.0 0.0 1.0
+    ]
     result = matrix * translation
-    
-    # Copy result back to matrix in-place
     for i in 1:size(matrix, 1), j in 1:size(matrix, 2)
         matrix[i, j] = result[i, j]
     end
@@ -31,39 +24,63 @@ end
 function rotate!(matrix::Matrix{T}, angle::Real) where T
     c = cos(angle)
     s = sin(angle)
-    
-    # Create rotation matrix
-    rotation = T[c   -s   0.0  0.0;
-                s    c   0.0  0.0;
-                0.0  0.0  1.0  0.0;
-                0.0  0.0  0.0  1.0]
-    
-    # Apply rotation in-place
+    rotation = T[
+        c   -s    0.0  0.0;
+        s    c    0.0  0.0;
+        0.0  0.0  1.0  0.0;
+        0.0  0.0  0.0  1.0
+    ]
     result = matrix * rotation
-    
     for i in 1:size(matrix, 1), j in 1:size(matrix, 2)
         matrix[i, j] = result[i, j]
     end
     return matrix
 end
 
-function scale!(matrix::Matrix{T}, sx::Real, sy::Real) where T
-    # Create scaling matrix
-    scaling = T[sx   0.0  0.0  0.0;
-               0.0  sy   0.0  0.0;
-               0.0  0.0  1.0  0.0;
-               0.0  0.0  0.0  1.0]
+function rotate!(matrix::Matrix{T}, angle::Real, axis::Vector{T}) where T
+    # Validate axis input
+    length(axis) == 3 || throw(ArgumentError("Axis must be 3-element vector"))
     
-    # Apply scaling in-place
+    # Manual normalization
+    norm = sqrt(sum(x -> x^2, axis))
+    norm ≈ 0 && throw(ArgumentError("Rotation axis cannot be zero vector"))
+    axis_normalized = axis ./ norm
+
+    # Rotation matrix components
+    c = cos(angle)
+    s = sin(angle)
+    t = 1 - c
+    x, y, z = axis_normalized
+
+    # Construct rotation matrix
+    rotation = T[
+        t*x^2 + c      t*x*y - s*z   t*x*z + s*y   0.0;
+        t*x*y + s*z    t*y^2 + c     t*y*z - s*x   0.0;
+        t*x*z - s*y    t*y*z + s*x   t*z^2 + c     0.0;
+        0.0            0.0           0.0           1.0
+    ]
+
+    # In-place matrix update
+    result = matrix * rotation
+    for i in 1:size(matrix, 1), j in 1:size(matrix, 2)
+        matrix[i, j] = result[i, j]
+    end
+    return matrix
+end
+
+function scale!(matrix::Matrix{T}, sx::Real, sy::Real, sz::Real = 1.0) where T
+    scaling = T[
+        sx  0.0  0.0  0.0;
+        0.0  sy   0.0  0.0;
+        0.0  0.0  sz   0.0;
+        0.0  0.0  0.0  1.0
+    ]
     result = matrix * scaling
-    
     for i in 1:size(matrix, 1), j in 1:size(matrix, 2)
         matrix[i, j] = result[i, j]
     end
     return matrix
 end
-
-# === Existing OpenGL Helper Functions (Unchanged) ===
 
 function gl_gen_one(gl_gen_fn)
     id = GLuint[0]
@@ -147,8 +164,6 @@ function create_shader_program(vertex_shader, fragment_shader)
     end
     return prog
 end
-
-# === New Global State & Constants ===
 
 global glsl_version = ""
 global immediate_mesh = nothing
