@@ -795,7 +795,7 @@ function start_render_loop(render::Function; wait_for_events::Bool = false)
 
             bg_color = 0.0f0 # Gray background
             glClearColor(bg_color, bg_color, bg_color, 1.0f0)
-            glClear(GL_COLOR_BUFFER_BIT)
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT)
 
             render()
             # --- End Frame ---
@@ -985,14 +985,17 @@ function test_scene_3d()
     test_texture = load_texture("./test_texture.png")
     cube_mesh = create_cube(10.0f0)
 
+    glEnable(GL_DEPTH_TEST)
+
     start_render_loop(function ()
         frame_count += 1
         save()
         update_perspective_projection_matrix()
 
         translate(frame_count / 100, 0, -20)
-        fillcolor(rgba(255, 0, 0, 255))
-        fillrect(0, 0, 100, 100)
+        fillcolor(rgba(255, 255, 255, 255))
+        fillrect(0, 0, 1, 1)
+        drawimage(0, 0, 1, 1, test_texture)
 
         rotate(frame_count / 30.6, frame_count / 20, frame_count / 40)
         draw_mesh(cube_mesh, test_texture)

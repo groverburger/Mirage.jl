@@ -23,9 +23,8 @@ get_default_attributes() = [
 ]
 
 get_default_3d_attributes() = [
-    VertexAttribute(0, 3, GL_FLOAT, false, 0),                   # Position (x, y, z)
-    VertexAttribute(2, 2, GL_FLOAT, false, 6 * sizeof(Float32)), # Texcoord (u, v)
-    VertexAttribute(1, 3, GL_FLOAT, false, 3 * sizeof(Float32))  # Normal (nx, ny, nz)
+    VertexAttribute(0, 3, GL_FLOAT, false, 0),                    # Position (x, y, z)
+    VertexAttribute(1, 2, GL_FLOAT, false, 3 * sizeof(Float32))   # Texture coordinates (u, v)]
 ]
 
 function create_mesh(vertices::Vector{T} = Float32[0, 0, 0, 0],
@@ -192,7 +191,7 @@ function create_cube(size::Float32 = 1.0f0)
          s, -s,  s, 1, 0,  # Bottom-right
         -s,  s,  s, 0, 1,  # Top-left
          s,  s,  s, 1, 1,  # Top-right
-        
+
         # Back face (2 triangles)
          s, -s, -s, 0, 0,  # Bottom-left
         -s, -s, -s, 1, 0,  # Bottom-right
@@ -200,7 +199,7 @@ function create_cube(size::Float32 = 1.0f0)
         -s, -s, -s, 1, 0,  # Bottom-right
          s,  s, -s, 0, 1,  # Top-left
         -s,  s, -s, 1, 1,  # Top-right
-        
+
         # Left face (2 triangles)
         -s, -s, -s, 0, 0,  # Bottom-left
         -s, -s,  s, 1, 0,  # Bottom-right
@@ -208,7 +207,7 @@ function create_cube(size::Float32 = 1.0f0)
         -s, -s,  s, 1, 0,  # Bottom-right
         -s,  s, -s, 0, 1,  # Top-left
         -s,  s,  s, 1, 1,  # Top-right
-        
+
         # Right face (2 triangles)
          s, -s,  s, 0, 0,  # Bottom-left
          s, -s, -s, 1, 0,  # Bottom-right
@@ -216,7 +215,7 @@ function create_cube(size::Float32 = 1.0f0)
          s, -s, -s, 1, 0,  # Bottom-right
          s,  s,  s, 0, 1,  # Top-left
          s,  s, -s, 1, 1,  # Top-right
-        
+
         # Top face (2 triangles)
         -s,  s,  s, 0, 0,  # Bottom-left
          s,  s,  s, 1, 0,  # Bottom-right
@@ -224,7 +223,7 @@ function create_cube(size::Float32 = 1.0f0)
          s,  s,  s, 1, 0,  # Bottom-right
         -s,  s, -s, 0, 1,  # Top-left
          s,  s, -s, 1, 1,  # Top-right
-        
+
         # Bottom face (2 triangles)
         -s, -s, -s, 0, 0,  # Bottom-left
          s, -s, -s, 1, 0,  # Bottom-right
@@ -233,9 +232,6 @@ function create_cube(size::Float32 = 1.0f0)
         -s, -s,  s, 0, 1,  # Top-left
          s, -s,  s, 1, 1   # Top-right
     ]
-    
-    return create_mesh(vertices, [
-        VertexAttribute(0, 3, GL_FLOAT, false, 0),
-        VertexAttribute(2, 2, GL_FLOAT, false, 6 * sizeof(Float32))
-    ])
+
+    return create_mesh(vertices, get_default_3d_attributes())
 end
