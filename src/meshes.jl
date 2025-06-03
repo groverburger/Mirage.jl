@@ -79,18 +79,7 @@ function create_mesh(vertices::Vector{T} = Float32[0, 0, 0, 0],
     )
 end
 
-#=
-function draw_mesh(mesh::Mesh, shader_program::GLuint)
-    glUseProgram(shader_program)
-    glBindVertexArray(mesh.vao)
-    glDrawArrays(mesh.draw_mode, 0, mesh.vertex_count)
-    glBindVertexArray(0)
-    glUseProgram(0)
-end
-draw_mesh(mesh::Mesh, shader_info::ShaderInfo) = draw_mesh(mesh, shader_info.program_id)
-=#
-
-function draw_mesh(mesh::Mesh, texture_id::GLuint, tint_color::Vector{Float32}=[1.0f0, 1.0f0, 1.0f0])
+function draw_mesh(mesh::Mesh, texture_id::GLuint, tint_color::Vector{Float32}=[1.0f0, 1.0f0, 1.0f0, 1.0f])
     ctx::RenderContext = get_context()
     glUseProgram(ctx.texture_shader.program_id)
     glUniformMatrix4fv(ctx.texture_shader.uniform_locations["projection"], 1, GL_FALSE, get_context().projection)
@@ -115,7 +104,7 @@ function draw_mesh(mesh::Mesh, texture_id::GLuint, tint_color::Vector{Float32}=[
     glUseProgram(0)
 end
 
-function draw_mesh(mesh::Mesh, tint_color::Vector{Float32}=[1.0f0, 1.0f0, 1.0f0])
+function draw_mesh(mesh::Mesh, tint_color::Vector{Float32}=[1.0f0, 1.0f0, 1.0f0, 1.0f])
     ctx::RenderContext = get_context()
     draw_mesh(mesh, ctx.blank_texture, tint_color)
 end
