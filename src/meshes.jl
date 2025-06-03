@@ -81,16 +81,15 @@ end
 
 function draw_mesh(mesh::Mesh, texture_id::GLuint, tint_color::Vector{Float32}=[1.0f0, 1.0f0, 1.0f0, 1.0f])
     ctx::RenderContext = get_context()
-    glUseProgram(ctx.texture_shader.program_id)
-    glUniformMatrix4fv(ctx.texture_shader.uniform_locations["projection"], 1, GL_FALSE, get_context().projection)
-    transform::Matrix = get_context().context_stack[end].transform
-    glUniformMatrix4fv(ctx.texture_shader.uniform_locations["model"], 1, GL_FALSE, transform)
-    glUniform4f(ctx.texture_shader.uniform_locations["tintColor"], tint_color...)
+    glUseProgram(ctx.shader.program_id)
+    glUniformMatrix4fv(ctx.shader.uniform_locations["projection"], 1, GL_FALSE, get_state().projection)
+    glUniformMatrix4fv(ctx.shader.uniform_locations["model"], 1, GL_FALSE, get_state().transform)
+    glUniform4f(ctx.shader.uniform_locations["tintColor"], tint_color...)
 
     # Activate texture unit 0 and bind the texture
     glActiveTexture(GL_TEXTURE0)
     glBindTexture(GL_TEXTURE_2D, texture_id)
-    glUniform1i(ctx.texture_shader.uniform_locations["textureSampler"], 0)
+    glUniform1i(ctx.shader.uniform_locations["textureSampler"], 0)
 
     # Bind the mesh's VAO (which contains all vertex attribute configurations)
     glBindVertexArray(mesh.vao)

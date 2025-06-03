@@ -259,8 +259,7 @@ end
 
 function update_projection_matrix(width, height, dpi_scaling::Number=1.0)
     # Map pixel coords (0, width) -> (-1, 1) and (0, height) -> (1, -1)
-    ctx = get_context()
-    ctx.projection = ortho(0.0f0, Float32(width / dpi_scaling), Float32(height / dpi_scaling), 0.0f0)
+    get_state().projection = ortho(0.0f0, Float32(width / dpi_scaling), Float32(height / dpi_scaling), 0.0f0)
     glViewport(0, 0, width, height)
 end
 
@@ -308,6 +307,7 @@ end
 
 @kwdef mutable struct ContextState
     transform::Matrix{Float32} = Float32[1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 1]
+    projection::Matrix{Float32} = ortho(0f0, 800f0, 600f0, 0f0)
     fill_color::Tuple{Float32, Float32, Float32, Float32} = (1, 1, 1, 1)
     stroke_color::Tuple{Float32, Float32, Float32, Float32} = (0, 0, 0, 1)
     stroke_width::Float32 = 1
@@ -322,10 +322,9 @@ function clone(x::ContextState)
 end
 
 mutable struct RenderContext
-    texture_shader::ShaderInfo
+    shader::ShaderInfo
     blank_texture::GLuint
     font_texture::GLuint
-    projection::Matrix{Float32}
     char_width::Float32  # Assuming fixed width font atlas grid cell
     char_height::Float32 # Assuming fixed height font atlas grid cell
     atlas_cols::Int      # Number of columns in font atlas grid
@@ -340,11 +339,11 @@ mutable struct RenderContext
         glDeleteShader(texture_vs)
         glDeleteShader(texture_fs)
 
-        texture_shader = ShaderInfo(texture_program, Dict{String, GLint}())
-        initialize_shader_uniform!(texture_shader, "projection")
-        initialize_shader_uniform!(texture_shader, "model")
-        initialize_shader_uniform!(texture_shader, "textureSampler")
-        initialize_shader_uniform!(texture_shader, "tintColor")
+        shader = ShaderInfo(texture_program, Dict{String, GLint}())
+        initialize_shader_uniform!(shader, "projection")
+        initialize_shader_uniform!(shader, "model")
+        initialize_shader_uniform!(shader, "textureSampler")
+        initialize_shader_uniform!(shader, "tintColor")
 
         blank_texture = gl_gen_texture()
         font_texture = load_texture("./ascii_font_atlas.png")
@@ -360,10 +359,9 @@ mutable struct RenderContext
         atlas_cols, atlas_rows = 16, 6
 
         return new(
-            texture_shader,
+            shader,
             blank_texture,
             font_texture,
-            ortho(0f0, 800f0, 600f0, 0f0),
             char_width, char_height,
             atlas_cols, atlas_rows,
             [ContextState()]
@@ -374,7 +372,7 @@ end
 const render_context = Ref{RenderContext}()
 
 function cleanup_render_context(ctx::RenderContext = get_context())
-    glDeleteProgram(ctx.texture_shader.program_id)
+    glDeleteProgram(ctx.shader.program_id)
     glDeleteTextures(1, [ctx.blank_texture])
     glDeleteTextures(1, [ctx.font_texture])
     global immediate_mesh = nothing
