@@ -79,7 +79,7 @@ function create_mesh(vertices::Vector{T} = Float32[0, 0, 0, 0],
     )
 end
 
-function draw_mesh(mesh::Mesh, texture_id::GLuint, tint_color::Vector{Float32}=[1.0f0, 1.0f0, 1.0f0, 1.0f])
+function draw_mesh(mesh::Mesh, texture_id::GLuint, tint_color::Vector{Float32}=[1.0f0, 1.0f0, 1.0f0, 1.0f0])
     ctx::RenderContext = get_context()
     glUseProgram(ctx.shader.program_id)
     glUniformMatrix4fv(ctx.shader.uniform_locations["projection"], 1, GL_FALSE, get_state().projection)
@@ -103,7 +103,7 @@ function draw_mesh(mesh::Mesh, texture_id::GLuint, tint_color::Vector{Float32}=[
     glUseProgram(0)
 end
 
-function draw_mesh(mesh::Mesh, tint_color::Vector{Float32}=[1.0f0, 1.0f0, 1.0f0, 1.0f])
+function draw_mesh(mesh::Mesh, tint_color::Vector{Float32}=[1.0f0, 1.0f0, 1.0f0, 1.0f0])
     ctx::RenderContext = get_context()
     draw_mesh(mesh, ctx.blank_texture, tint_color)
 end
@@ -176,4 +176,66 @@ function create_circle(radius::Float32, segments::Int = 32)
     end
 
     return create_mesh(vertices)
+end
+
+function create_cube(size::Float32 = 1.0f0)
+    # Half size for centering
+    s = size / 2
+
+    # Vertices for all 6 faces of the cube (12 triangles total)
+    # Each vertex has: x, y, z, u, v (position + texture coordinates)
+    vertices = Float32[
+        # Front face (2 triangles)
+        -s, -s,  s, 0, 0,  # Bottom-left
+         s, -s,  s, 1, 0,  # Bottom-right
+        -s,  s,  s, 0, 1,  # Top-left
+         s, -s,  s, 1, 0,  # Bottom-right
+        -s,  s,  s, 0, 1,  # Top-left
+         s,  s,  s, 1, 1,  # Top-right
+        
+        # Back face (2 triangles)
+         s, -s, -s, 0, 0,  # Bottom-left
+        -s, -s, -s, 1, 0,  # Bottom-right
+         s,  s, -s, 0, 1,  # Top-left
+        -s, -s, -s, 1, 0,  # Bottom-right
+         s,  s, -s, 0, 1,  # Top-left
+        -s,  s, -s, 1, 1,  # Top-right
+        
+        # Left face (2 triangles)
+        -s, -s, -s, 0, 0,  # Bottom-left
+        -s, -s,  s, 1, 0,  # Bottom-right
+        -s,  s, -s, 0, 1,  # Top-left
+        -s, -s,  s, 1, 0,  # Bottom-right
+        -s,  s, -s, 0, 1,  # Top-left
+        -s,  s,  s, 1, 1,  # Top-right
+        
+        # Right face (2 triangles)
+         s, -s,  s, 0, 0,  # Bottom-left
+         s, -s, -s, 1, 0,  # Bottom-right
+         s,  s,  s, 0, 1,  # Top-left
+         s, -s, -s, 1, 0,  # Bottom-right
+         s,  s,  s, 0, 1,  # Top-left
+         s,  s, -s, 1, 1,  # Top-right
+        
+        # Top face (2 triangles)
+        -s,  s,  s, 0, 0,  # Bottom-left
+         s,  s,  s, 1, 0,  # Bottom-right
+        -s,  s, -s, 0, 1,  # Top-left
+         s,  s,  s, 1, 0,  # Bottom-right
+        -s,  s, -s, 0, 1,  # Top-left
+         s,  s, -s, 1, 1,  # Top-right
+        
+        # Bottom face (2 triangles)
+        -s, -s, -s, 0, 0,  # Bottom-left
+         s, -s, -s, 1, 0,  # Bottom-right
+        -s, -s,  s, 0, 1,  # Top-left
+         s, -s, -s, 1, 0,  # Bottom-right
+        -s, -s,  s, 0, 1,  # Top-left
+         s, -s,  s, 1, 1   # Top-right
+    ]
+    
+    return create_mesh(vertices, [
+        VertexAttribute(0, 3, GL_FLOAT, false, 0),
+        VertexAttribute(2, 2, GL_FLOAT, false, 6 * sizeof(Float32))
+    ])
 end

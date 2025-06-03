@@ -170,7 +170,7 @@ global immediate_mesh = nothing
 
 const texture_vertex_shader_source = """
     #version 330 core
-    layout (location = 0) in vec2 aPos;
+    layout (location = 0) in vec3 aPos;
     layout (location = 1) in vec2 aTexCoord;
 
     out vec2 TexCoord;
@@ -180,7 +180,7 @@ const texture_vertex_shader_source = """
 
     void main()
     {
-        gl_Position = projection * model * vec4(aPos.x, aPos.y, 0.0, 1.0);
+        gl_Position = projection * model * vec4(aPos.x, aPos.y, aPos.z, 1.0);
         TexCoord = aTexCoord;
     }
 """
@@ -409,17 +409,23 @@ get_context() = render_context[]
 
 get_state() = get_context().context_stack[end]
 
-function translate(dx::Number, dy::Number)
-    translate!(get_state().transform, dx, dy)
+function translate(dx::Number, dy::Number, dz::Number = 0)
+    translate!(get_state().transform, dx, dy, dz)
 end
 
-function scale(dx::Number, dy::Number)
-    scale!(get_state().transform, dx, dy)
+function scale(dx::Number, dy::Number, dz::Number = 1)
+    scale!(get_state().transform, dx, dy, dz)
 end
-scale(n::Number) = scale(n, n)
+scale(n::Number) = scale(n, n, n)
 
 function rotate(angle::Number)
     rotate!(get_state().transform, angle)
+end
+
+function rotate(x::Number, y::Number, z::Number)
+    rotate!(get_state().transform, x, Float32[1, 0, 0])
+    rotate!(get_state().transform, y, Float32[0, 1, 0])
+    rotate!(get_state().transform, z, Float32[0, 0, 1])
 end
 
 function beginpath()
@@ -786,6 +792,11 @@ function start_render_loop(render::Function; wait_for_events::Bool = false)
     while !GLFW.WindowShouldClose(window[])
         try
             frame_count += 1
+
+            bg_color = 0.0f0 # Gray background
+            glClearColor(bg_color, bg_color, bg_color, 1.0f0)
+            glClear(GL_COLOR_BUFFER_BIT)
+
             render()
             # --- End Frame ---
             GLFW.SwapBuffers(window[])
@@ -881,11 +892,6 @@ function julia_main()::Cint
 
         update_ortho_projection_matrix()
 
-        # --- Rendering ---
-        bg_color = 0.1f0 # Gray background
-        glClearColor(bg_color, bg_color, bg_color, 1.0f0)
-        glClear(GL_COLOR_BUFFER_BIT)
-
         # Demo drawing calls:
         # Draw a solid red rectangle
         save()
@@ -969,6 +975,30 @@ function julia_main()::Cint
     end)
 
     return 0
+end
+
+function test_scene_3d()
+    initialize()
+
+    frame_count::Int64 = 0
+
+    test_texture = load_texture("./test_texture.png")
+    cube_mesh = create_cube(10.0f0)
+
+    start_render_loop(function ()
+        frame_count += 1
+        save()
+        update_perspective_projection_matrix()
+
+        translate(frame_count / 100, 0, -20)
+        fillcolor(rgba(255, 0, 0, 255))
+        fillrect(0, 0, 100, 100)
+
+        rotate(frame_count / 30.6, frame_count / 20, frame_count / 40)
+        draw_mesh(cube_mesh, test_texture)
+
+        restore()
+    end)
 end
 
 export
