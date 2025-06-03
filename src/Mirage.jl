@@ -192,11 +192,11 @@ const texture_fragment_shader_source = """
     in vec2 TexCoord;
 
     uniform sampler2D textureSampler;
-    uniform vec4 tintColor;
+    uniform vec4 color;
 
     void main()
     {
-        vec4 texColor = texture(textureSampler, TexCoord) * tintColor;
+        vec4 texColor = texture(textureSampler, TexCoord) * color;
         if (texColor.a == 0.0) { discard; }
         FragColor = texColor;
     }
@@ -257,9 +257,29 @@ function ortho(left::Float32, right::Float32, bottom::Float32, top::Float32, zNe
     return mat
 end
 
-function update_projection_matrix(width, height, dpi_scaling::Number=1.0)
+function perspective(fovy::Float32, aspect::Float32, near::Float32, far::Float32)::Matrix{Float32}
+    mat = zeros(Float32, 4, 4)
+    f = 1.0f0 / tan(fovy / 2.0f0)
+    mat[1,1] = f / aspect
+    mat[2,2] = f
+    mat[3,3] = (far + near) / (near - far)
+    mat[4,3] = -1.0f0
+    mat[3,4] = (2.0f0 * far * near) / (near - far)
+    return mat
+end
+
+function update_ortho_projection_matrix(width=get_context().width,
+                                        height=get_context().height,
+                                        dpi_scaling=get_context().dpi_scaling)
     # Map pixel coords (0, width) -> (-1, 1) and (0, height) -> (1, -1)
     get_state().projection = ortho(0.0f0, Float32(width / dpi_scaling), Float32(height / dpi_scaling), 0.0f0)
+    glViewport(0, 0, width, height)
+end
+
+function update_perspective_projection_matrix(width=get_context().width,
+                                              height=get_context().height,
+                                              dpi_scaling=get_context().dpi_scaling)
+    get_state().projection = perspective(Float32(pi / 4), Float32(width / height), 0.001f0, 10_000f0)
     glViewport(0, 0, width, height)
 end
 
@@ -330,6 +350,9 @@ mutable struct RenderContext
     atlas_cols::Int      # Number of columns in font atlas grid
     atlas_rows::Int      # Number of rows in font atlas grid
     context_stack::Vector{ContextState}
+    width::Int
+    height::Int
+    dpi_scaling::Number
 
     function RenderContext()::RenderContext
         # Compile Shaders
@@ -343,7 +366,7 @@ mutable struct RenderContext
         initialize_shader_uniform!(shader, "projection")
         initialize_shader_uniform!(shader, "model")
         initialize_shader_uniform!(shader, "textureSampler")
-        initialize_shader_uniform!(shader, "tintColor")
+        initialize_shader_uniform!(shader, "color")
 
         blank_texture = gl_gen_texture()
         font_texture = load_texture("./ascii_font_atlas.png")
@@ -731,15 +754,21 @@ function initialize(;window_width::Int = 800, window_height::Int = 600)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 
     initialize_render_context()
+    get_context().width = window_width
+    get_context().height = window_height
+    get_context().dpi_scaling = scale_x
 
     # Setup callbacks
-    GLFW.SetFramebufferSizeCallback(window[], (_, w, h) -> update_projection_matrix(w, h, scale_x))
+    GLFW.SetFramebufferSizeCallback(window[], function (_, w, h)
+        get_context().width = w
+        get_context().height = h
+    end)
 
     # Enable VSync
     GLFW.SwapInterval(1)
 
     # Initial projection matrix setup
-    update_projection_matrix(window_width, window_height, scale_x)
+    update_ortho_projection_matrix(window_width, window_height, scale_x)
 
     global terminate = function ()
         @info "Cleaning up resources..."
@@ -849,6 +878,8 @@ function julia_main()::Cint
         current_frame_time = time() # Get time at the start of the frame processing
         delta_time = current_frame_time - last_frame_time
         last_frame_time = current_frame_time
+
+        update_ortho_projection_matrix()
 
         # --- Rendering ---
         bg_color = 0.1f0 # Gray background

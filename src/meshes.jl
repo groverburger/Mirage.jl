@@ -84,7 +84,7 @@ function draw_mesh(mesh::Mesh, texture_id::GLuint, tint_color::Vector{Float32}=[
     glUseProgram(ctx.shader.program_id)
     glUniformMatrix4fv(ctx.shader.uniform_locations["projection"], 1, GL_FALSE, get_state().projection)
     glUniformMatrix4fv(ctx.shader.uniform_locations["model"], 1, GL_FALSE, get_state().transform)
-    glUniform4f(ctx.shader.uniform_locations["tintColor"], tint_color...)
+    glUniform4f(ctx.shader.uniform_locations["color"], tint_color...)
 
     # Activate texture unit 0 and bind the texture
     glActiveTexture(GL_TEXTURE0)
