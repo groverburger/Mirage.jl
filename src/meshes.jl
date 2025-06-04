@@ -71,7 +71,7 @@ function create_mesh(vertices::Vector{T} = Float32[0, 0, 0, 0],
     return Mesh(
         vao,
         vbo,
-        length(vertices),
+        count_vertices(attributes, vertices),
         draw_mode,
         stride,
         attributes
@@ -107,6 +107,11 @@ function draw_mesh(mesh::Mesh, tint_color::Vector{Float32}=[1.0f0, 1.0f0, 1.0f0,
     draw_mesh(mesh, ctx.blank_texture, tint_color)
 end
 
+function count_vertices(attributes::Vector, vertices::Vector)
+    stride::Int = sum([attr.size for attr in attributes])
+    return div(length(vertices), stride)
+end
+
 # Update vertex data (for dynamic meshes)
 function update_mesh_vertices!(mesh::Mesh, vertices::Vector{T}, usage::GLenum = GL_DYNAMIC_DRAW) where T
     glBindVertexArray(mesh.vao)
@@ -114,7 +119,7 @@ function update_mesh_vertices!(mesh::Mesh, vertices::Vector{T}, usage::GLenum = 
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, usage)
     glBindBuffer(GL_ARRAY_BUFFER, 0)
     glBindVertexArray(0)
-    mesh.vertex_count = div(length(vertices), 4)  # Assuming 4 floats per vertex
+    mesh.vertex_count = count_vertices(mesh.attributes, vertices)
 end
 
 # Destroy mesh and free GPU resources
