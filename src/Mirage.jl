@@ -176,11 +176,12 @@ const texture_vertex_shader_source = """
     out vec2 TexCoord;
 
     uniform mat4 projection;
+    uniform mat4 view;
     uniform mat4 model;
 
     void main()
     {
-        gl_Position = projection * model * vec4(aPos.x, aPos.y, aPos.z, 1.0);
+        gl_Position = projection * view * model * vec4(aPos.x, aPos.y, aPos.z, 1.0);
         TexCoord = aTexCoord;
     }
 """
@@ -257,15 +258,48 @@ function ortho(left::Float32, right::Float32, bottom::Float32, top::Float32, zNe
     return mat
 end
 
-function perspective(fovy::Float32, aspect::Float32, near::Float32, far::Float32)::Matrix{Float32}
-    mat = zeros(Float32, 4, 4)
-    f = 1.0f0 / tan(fovy / 2.0f0)
-    mat[1,1] = f / aspect
-    mat[2,2] = f
-    mat[3,3] = (far + near) / (near - far)
-    mat[4,3] = -1.0f0
-    mat[3,4] = (2.0f0 * far * near) / (near - far)
-    return mat
+function perspective(fov::Float32, aspectRatio::Float32, near::Float32, far::Float32)::Matrix{Float32}
+    top = near * tan(fov/2)
+    bottom = -1*top
+    right = top * aspectRatio
+    left = -1*right
+
+    return Float32[
+        2*near/(right-left) 0                   (right+left)/(right-left) 0;
+        0                   2*near/(top-bottom) (top+bottom)/(top-bottom) 0;
+        0                   0                   -1*(far+near)/(far-near) -2*far*near/(far-near);
+        0                   0                   -1                        0
+    ]
+end
+
+function view(position, target, up = [0, 0, 1])
+  z = normalize(position - target)
+  x = normalize(cross(up, z))
+  y = cross(z, x)
+
+  return Float32[
+      x[1] x[2] x[3] -dot(x, position);
+      y[1] y[2] y[3] -dot(y, position);
+      z[1] z[2] z[3] -dot(z, position);
+      0    0    0    1
+  ]
+end
+
+function normalize(v::Vector{Float32})::Vector{Float32}
+    len = sqrt(sum(v .^ 2))
+    return len > 0.0f0 ? v ./ len : v
+end
+
+function cross(a::Vector{Float32}, b::Vector{Float32})::Vector{Float32}
+    return Float32[
+        a[2] * b[3] - a[3] * b[2],
+        a[3] * b[1] - a[1] * b[3],
+        a[1] * b[2] - a[2] * b[1]
+    ]
+end
+
+function dot(a::Vector{Float32}, b::Vector{Float32})::Float32
+    return sum(a .* b)
 end
 
 function update_ortho_projection_matrix(width=get_context().width,
@@ -327,6 +361,7 @@ end
 
 @kwdef mutable struct ContextState
     transform::Matrix{Float32} = Float32[1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 1]
+    view::Matrix{Float32} = Float32[1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 1]
     projection::Matrix{Float32} = ortho(0f0, 800f0, 600f0, 0f0)
     fill_color::Tuple{Float32, Float32, Float32, Float32} = (1, 1, 1, 1)
     stroke_color::Tuple{Float32, Float32, Float32, Float32} = (0, 0, 0, 1)
@@ -364,6 +399,7 @@ mutable struct RenderContext
 
         shader = ShaderInfo(texture_program, Dict{String, GLint}())
         initialize_shader_uniform!(shader, "projection")
+        initialize_shader_uniform!(shader, "view")
         initialize_shader_uniform!(shader, "model")
         initialize_shader_uniform!(shader, "textureSampler")
         initialize_shader_uniform!(shader, "color")
@@ -426,6 +462,10 @@ function rotate(x::Number, y::Number, z::Number)
     rotate!(get_state().transform, x, Float32[1, 0, 0])
     rotate!(get_state().transform, y, Float32[0, 1, 0])
     rotate!(get_state().transform, z, Float32[0, 0, 1])
+end
+
+function lookat(args...)
+    get_state().view = view(args...)
 end
 
 function beginpath()
@@ -982,7 +1022,7 @@ function test_scene_3d()
 
     frame_count::Int64 = 0
 
-    test_texture = load_texture("./test_texture.png")
+    test_texture = load_texture("./testimage.jpg")
     cube_mesh = create_cube(10.0f0)
 
     glEnable(GL_DEPTH_TEST)
@@ -992,12 +1032,26 @@ function test_scene_3d()
         save()
         update_perspective_projection_matrix()
 
-        translate(frame_count / 100, 0, -20)
+        #translate(frame_count / 100, 0, -20)
         fillcolor(rgba(255, 255, 255, 255))
         fillrect(0, 0, 1, 1)
         drawimage(0, 0, 1, 1, test_texture)
+        lookat(Float32[cos(frame_count / 100) * 30, sin(frame_count / 100) * 30, 0], Float32[0, 0, 0], Float32[0, 0, 1])
 
-        rotate(frame_count / 30.6, frame_count / 20, frame_count / 40)
+        save()
+        translate(0, 0, 10)
+        scale(0.5)
+        draw_mesh(cube_mesh, test_texture)
+        restore()
+
+        save()
+        translate(10, 0, 0)
+        rotate(pi / 2)
+        scale(0.5)
+        draw_mesh(cube_mesh, test_texture)
+        restore()
+
+        #rotate(frame_count / 30.6, frame_count / 20, frame_count / 40)
         draw_mesh(cube_mesh, test_texture)
 
         restore()
@@ -1019,6 +1073,7 @@ export
     text,
     translate,
     rotate,
+    lookat,
     scale,
     drawimage,
     fillrect,
