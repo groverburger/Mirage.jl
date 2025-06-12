@@ -674,7 +674,7 @@ function drawimage(x::Number,
         x + w, y + h,  1.0, 0.0,  # Bottom-right
         x + w, y,      1.0, 1.0   # Top-right
     ])
-    draw_mesh(immediate_mesh, texture_id, [get_state().fill_color...])
+    draw_mesh(immediate_mesh, texture_id)
 end
 
 # Draw text using the loaded font atlas (simplified)

@@ -78,7 +78,11 @@ function create_mesh(vertices::Vector{T} = Float32[0, 0, 0, 0],
     )
 end
 
-function draw_mesh(mesh::Mesh, texture_id::GLuint, tint_color::Vector{Float32}=[1.0f0, 1.0f0, 1.0f0, 1.0f0])
+function create_3d_mesh(vertices::Vector{Float32} = Float32[0, 0, 0, 0]; kwargs...)
+    return create_mesh(vertices, get_default_3d_attributes(); kwargs...)
+end
+
+function draw_mesh(mesh::Mesh, texture_id::GLuint, tint_color::Vector{Float32})
     ctx::RenderContext = get_context()
     glUseProgram(ctx.shader.program_id)
     glUniformMatrix4fv(ctx.shader.uniform_locations["projection"], 1, GL_FALSE, get_state().projection)
@@ -103,9 +107,18 @@ function draw_mesh(mesh::Mesh, texture_id::GLuint, tint_color::Vector{Float32}=[
     glUseProgram(0)
 end
 
-function draw_mesh(mesh::Mesh, tint_color::Vector{Float32}=[1.0f0, 1.0f0, 1.0f0, 1.0f0])
+function draw_mesh(mesh::Mesh, texture_id::GLuint)
+    draw_mesh(mesh, texture_id, Float32[get_state().fill_color...])
+end
+
+function draw_mesh(mesh::Mesh, tint_color::Vector{Float32})
     ctx::RenderContext = get_context()
     draw_mesh(mesh, ctx.blank_texture, tint_color)
+end
+
+function draw_mesh(mesh::Mesh)
+    ctx::RenderContext = get_context()
+    draw_mesh(mesh, ctx.blank_texture)
 end
 
 function count_vertices(attributes::Vector, vertices::Vector)
@@ -114,7 +127,7 @@ function count_vertices(attributes::Vector, vertices::Vector)
 end
 
 # Update vertex data (for dynamic meshes)
-function update_mesh_vertices!(mesh::Mesh, vertices::Vector{T}, usage::GLenum = GL_DYNAMIC_DRAW) where T
+function update_mesh_vertices!(mesh::Mesh, vertices::Vector{Float32}, usage::GLenum = GL_DYNAMIC_DRAW)
     glBindVertexArray(mesh.vao)
     glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo)
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, usage)
