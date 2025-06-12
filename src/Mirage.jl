@@ -931,6 +931,7 @@ function julia_main()::Cint
         last_frame_time = current_frame_time
 
         update_ortho_projection_matrix()
+        #update_perspective_projection_matrix()
 
         # Demo drawing calls:
         # Draw a solid red rectangle
@@ -1036,12 +1037,24 @@ function test_scene_3d()
         fillcolor(rgba(255, 255, 255, 255))
         fillrect(0, 0, 1, 1)
         drawimage(0, 0, 1, 1, test_texture)
+
         lookat(Float32[cos(frame_count / 100) * 30, sin(frame_count / 100) * 30, 0], Float32[0, 0, 0], Float32[0, 0, 1])
 
         save()
         translate(0, 0, 10)
         scale(0.5)
         draw_mesh(cube_mesh, test_texture)
+        save()
+        strokecolor(rgba(255, 0, 0, 255))
+        #fillcolor(rgba(255, 0, 0, 255))
+        #fillrect(0.0f0, 0.0f0, 100.0f0, 80.0f0)
+        beginpath()
+        moveto(100, 100)
+        lineto(0, 0)
+        lineto(-100, 0)
+        stroke()
+        restore()
+
         restore()
 
         save()
@@ -1081,6 +1094,8 @@ export
     rect,
     circle,
     Mesh,
+    create_mesh,
+    create_3d_mesh,
     update_mesh_vertices,
     draw_mesh,
     RenderContext,
