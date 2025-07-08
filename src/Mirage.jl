@@ -366,8 +366,8 @@ end
     fill_color::Tuple{Float32, Float32, Float32, Float32} = (1, 1, 1, 1)
     stroke_color::Tuple{Float32, Float32, Float32, Float32} = (0, 0, 0, 1)
     stroke_width::Float32 = 1
-    stroke_path::Vector{Tuple{Float32, Float32}} = Tuple{Float32, Float32}[]
-    stroke_cursor::Tuple{Float32, Float32} = (0, 0)
+    paths::Vector{Vector{Tuple{Float32, Float32}}} = [[]]
+    current_path_index::Int = 1
 end
 
 function clone(x::ContextState)
@@ -469,19 +469,29 @@ function lookat(args...)
 end
 
 function beginpath()
-    empty!(get_state().stroke_path)
+    get_state().paths = [[]]
+    get_state().current_path_index = 1
 end
 
 function moveto(x::Number, y::Number)
-    get_state().stroke_cursor = (Float32(x), Float32(y))
+    state = get_state()
+    if !isempty(state.paths[state.current_path_index])
+        push!(state.paths, [])
+        state.current_path_index += 1
+    end
+    push!(state.paths[state.current_path_index], (Float32(x), Float32(y)))
 end
 
 function lineto(x::Number, y::Number)
-    last_cursor::Tuple{Float32, Float32} = get_state().stroke_cursor
-    now_cursor::Tuple{Float32, Float32} = (Float32(x), Float32(y))
-    get_state().stroke_cursor = now_cursor
-    push!(get_state().stroke_path, last_cursor)
-    push!(get_state().stroke_path, now_cursor)
+    push!(get_state().paths[get_state().current_path_index], (Float32(x), Float32(y)))
+end
+
+function closepath()
+    state = get_state()
+    current_path = state.paths[state.current_path_index]
+    if !isempty(current_path)
+        push!(current_path, current_path[1])
+    end
 end
 
 function fillcolor(tuple::Tuple{Number, Number, Number})
@@ -531,86 +541,76 @@ end
 function stroke()
     immediate_mesh = get_immediate_mesh()
     state::ContextState = get_state()
-    if length(state.stroke_path) < 2
-        @debug "Skipping stroke with insufficient path points"
-        return
-    end
     vertices::Vector{Float32} = Float32[]
 
-    for i in 1:2:length(state.stroke_path)
-        # Draw rectangle for line
-        (x1, y1) = state.stroke_path[i]
-        (x2, y2) = state.stroke_path[i + 1]
-        angle::Float64 = atan(y2 - y1, x2 - x1)
-        dx::Float32 = cos(angle + pi / 2) * state.stroke_width
-        dy::Float32 = sin(angle + pi / 2) * state.stroke_width
-        append!(vertices, Float32[
-            x1 + dx, y1 + dy, 0.0, 1.0,
-            x1 - dx, y1 - dy, 0.0, 0.0,
-            x2 + dx, y2 + dy, 1.0, 0.0,
-            x1 - dx, y1 - dy, 0.0, 1.0,
-            x2 + dx, y2 + dy, 1.0, 0.0,
-            x2 - dx, y2 - dy, 1.0, 1.0
-        ])
-
-        # Add simple elbows to join connecting lines
-        if i + 1 >= length(state.stroke_path);
+    for path in state.paths
+        if length(path) < 2
             continue
         end
-        (x3, y3) = state.stroke_path[i + 2]
-        if isapprox(x2, x3) && isapprox(y2, y3)
-            (x4, y4) = state.stroke_path[i + 3]
-            next_angle::Float64 = atan(y4 - y3, x4 - x3)
-            ndx::Float32 = cos(next_angle + pi / 2) * state.stroke_width
-            ndy::Float32 = sin(next_angle + pi / 2) * state.stroke_width
+
+        for i in 1:(length(path) - 1)
+            (x1, y1) = path[i]
+            (x2, y2) = path[i + 1]
+
+            angle::Float64 = atan(y2 - y1, x2 - x1)
+            dx::Float32 = cos(angle + pi / 2) * state.stroke_width / 2
+            dy::Float32 = sin(angle + pi / 2) * state.stroke_width / 2
+
             append!(vertices, Float32[
-                x2 + dx,  y2 + dy, 0.0, 1.0,
-                x2 - dx,  y2 - dy, 0.0, 0.0,
-                x2 + ndx, y2 + ndy, 1.0, 0.0,
-                x2 - dx,  y2 - dy, 0.0, 1.0,
-                x2 + ndx, y2 + ndy, 1.0, 0.0,
-                x2 - ndx, y2 - ndy, 1.0, 1.0
+                x1 + dx, y1 + dy, 0.0, 0.0,
+                x1 - dx, y1 - dy, 0.0, 1.0,
+                x2 + dx, y2 + dy, 1.0, 1.0,
+                x1 - dx, y1 - dy, 0.0, 1.0,
+                x2 - dx, y2 - dy, 1.0, 0.0,
+                x2 + dx, y2 + dy, 1.0, 1.0,
             ])
         end
     end
 
-    update_mesh_vertices!(immediate_mesh, vertices)
-    draw_mesh(immediate_mesh, get_context().blank_texture, [state.stroke_color...])
+    if !isempty(vertices)
+        update_mesh_vertices!(immediate_mesh, vertices)
+        draw_mesh(immediate_mesh, get_context().blank_texture, [state.stroke_color...])
+    end
 end
 
 function fill()
     immediate_mesh = get_immediate_mesh()
     state::ContextState = get_state()
 
-    unique_points = unique(state.stroke_path)
-    x3::Number = 0
-    y3::Number = 0
-    for (x, y) in unique_points
-        x3 += x
-        y3 += y
-    end
-    x3 /= length(unique_points)
-    y3 /= length(unique_points)
+    for path in state.paths
+        if length(path) < 3
+            continue
+        end
 
-    for i in 1:2:length(state.stroke_path)
-        # Draw rectangle for line
-        (x1, y1) = state.stroke_path[i]
-        (x2, y2) = state.stroke_path[i + 1]
-        update_mesh_vertices!(immediate_mesh, Float32[
-            x1, y1, 0.0, 1.0,
-            x2, y2, 0.0, 0.0,
-            x3, y3, 1.0, 0.0
-        ])
-        draw_mesh(immediate_mesh, get_context().blank_texture, [state.fill_color...])
+        # Simple triangulation using the first vertex as the center
+        center_x, center_y = path[1]
+        vertices = Float32[]
+
+        for i in 2:(length(path) - 1)
+            x1, y1 = path[i]
+            x2, y2 = path[i + 1]
+
+            append!(vertices, Float32[
+                center_x, center_y, 0.5, 0.5, # Center vertex
+                x1, y1, 0.0, 0.0,             # First vertex on edge
+                x2, y2, 1.0, 0.0              # Second vertex on edge
+            ])
+        end
+
+        if !isempty(vertices)
+            update_mesh_vertices!(immediate_mesh, vertices)
+            draw_mesh(immediate_mesh, get_context().blank_texture, [state.fill_color...])
+        end
     end
 end
 
 function rect(x::Number, y::Number, w::Number, h::Number)
+    beginpath()
     moveto(x, y)
     lineto(x + w, y)
     lineto(x + w, y + h)
     lineto(x, y + h)
-    lineto(x, y)
+    closepath()
 end
 
 function circle(r::Number, x::Number = 0, y::Number = 0, segments::Int = 32)
@@ -952,8 +952,8 @@ function julia_main()::Cint
         #draw_mesh(circle)
         #beginpath()
         fillcolor(rgba(255, 255, 255, 100))
-        fillcircle(100)
-        #fill()
+        circle(100)
+        fill()
         restore()
 
         # Draw the loaded texture (if available)
@@ -1000,6 +1000,20 @@ function julia_main()::Cint
         lineto(500, 300)
         strokewidth(2)
         strokecolor(rgba(64, 128, 255, 255))
+        stroke()
+        restore()
+
+        save()
+        beginpath()
+        strokewidth(5)
+        strokecolor(rgba(255, 255, 0, 255))
+        moveto(400, 400)
+        lineto(500, 400)
+        lineto(500, 500)
+        lineto(400, 500)
+        closepath()
+        fillcolor(rgba(0, 0, 255, 100))
+        fill()
         stroke()
         restore()
 
@@ -1076,6 +1090,7 @@ export
     restore,
     moveto,
     lineto,
+    closepath,
     beginpath,
     fill,
     stroke,
@@ -1106,5 +1121,4 @@ export
     initialize,
     start_render_loop
 
-end # module GraphicsTest
-
+end # module Mirage
