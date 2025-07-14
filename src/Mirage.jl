@@ -553,8 +553,8 @@ function stroke()
             (x2, y2) = path[i + 1]
 
             angle::Float64 = atan(y2 - y1, x2 - x1)
-            dx::Float32 = cos(angle + pi / 2) * state.stroke_width / 2
-            dy::Float32 = sin(angle + pi / 2) * state.stroke_width / 2
+            dx::Float32 = cos(angle + pi / 2) * state.stroke_width
+            dy::Float32 = sin(angle + pi / 2) * state.stroke_width
 
             append!(vertices, Float32[
                 x1 + dx, y1 + dy, 0.0, 0.0,
