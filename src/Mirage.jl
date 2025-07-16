@@ -357,6 +357,126 @@ function load_texture(img_rgba::Matrix{Images.RGBA{Images.N0f8}})::GLuint
     return tex_id
 end
 
+# === Canvas interface ===
+
+mutable struct Canvas
+    fbo::GLuint
+    texture::GLuint
+    rbo::GLuint # Renderbuffer Object for depth/stencil
+    width::Int
+    height::Int
+end
+
+function create_canvas(width::Int, height::Int)
+    # Generate Framebuffer
+    fbo = gl_gen_one(glGenFramebuffers)
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo)
+    gl_check_error("binding canvas FBO")
+
+    # Create Texture Attachment
+    texture = gl_gen_texture()
+    glBindTexture(GL_TEXTURE_2D, texture)
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, C_NULL)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0)
+    gl_check_error("attaching canvas texture")
+
+    # Create Renderbuffer for Depth/Stencil
+    rbo = gl_gen_one(glGenRenderbuffers)
+    glBindRenderbuffer(GL_RENDERBUFFER, rbo)
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height)
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbo)
+    gl_check_error("attaching canvas renderbuffer")
+
+    # Finalize and check status
+    if glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE
+        @error "Framebuffer is not complete!"
+    end
+
+    # Unbind to return to default state
+    glBindFramebuffer(GL_FRAMEBUFFER, 0)
+
+    return Canvas(fbo, texture, rbo, width, height)
+end
+
+"""
+Sets the render target to the specified canvas. All subsequent drawing
+commands will render to this canvas.
+"""
+function set_canvas(canvas::Canvas)
+    glBindFramebuffer(GL_FRAMEBUFFER, canvas.fbo)
+    glViewport(0, 0, canvas.width, canvas.height)
+end
+
+"""
+Resets the render target to the main window.
+"""
+function set_canvas()
+    ctx = get_context()
+    glBindFramebuffer(GL_FRAMEBUFFER, 0)
+    glViewport(0, 0, ctx.width, ctx.height)
+end
+
+"""
+Resizes the canvas and its underlying texture and renderbuffer objects.
+
+This is useful if the canvas needs to match a new window size or if a
+different resolution is required for rendering effects.
+"""
+function resize!(canvas::Canvas, width::Int, height::Int)
+    # Ensure dimensions are valid before proceeding
+    @assert width > 0 && height > 0 "Canvas dimensions must be positive"
+
+    canvas.width = width
+    canvas.height = height
+
+    # Resize the texture attachment
+    glBindTexture(GL_TEXTURE_2D, canvas.texture)
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, C_NULL)
+    gl_check_error("resizing canvas texture")
+
+    # Resize the renderbuffer attachment for depth and stencil
+    glBindRenderbuffer(GL_RENDERBUFFER, canvas.rbo)
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height)
+    gl_check_error("resizing canvas renderbuffer")
+
+    # Unbind objects to return to a clean state
+    glBindTexture(GL_TEXTURE_2D, 0)
+    glBindRenderbuffer(GL_RENDERBUFFER, 0)
+
+    return canvas
+end
+
+"""
+Frees the GPU resources associated with a Canvas.
+
+This includes the framebuffer object (FBO), the color texture, and the
+depth/stencil renderbuffer. It is essential to call this function when the
+canvas is no longer needed to prevent memory leaks on the GPU.
+"""
+function destroy!(canvas::Canvas)
+    # Ensure we don't try to delete already-deleted objects
+    if canvas.fbo == 0 && canvas.texture == 0 && canvas.rbo == 0
+        @warn "Canvas has already been destroyed."
+        return
+    end
+
+    glDeleteFramebuffers(1, [canvas.fbo])
+    gl_check_error("deleting canvas FBO")
+
+    glDeleteTextures(1, [canvas.texture])
+    gl_check_error("deleting canvas texture")
+
+    glDeleteRenderbuffers(1, [canvas.rbo])
+    gl_check_error("deleting canvas RBO")
+
+    # Set IDs to 0 to indicate that the resources have been freed
+    canvas.fbo = 0
+    canvas.texture = 0
+    canvas.rbo = 0
+end
+
 # === Drawing Interface ===
 
 @kwdef mutable struct ContextState
@@ -423,7 +543,9 @@ mutable struct RenderContext
             font_texture,
             char_width, char_height,
             atlas_cols, atlas_rows,
-            [ContextState()]
+            [ContextState()],
+            800, 600,
+            1.0
         )
     end
 end
@@ -746,8 +868,6 @@ end
 
 include("./meshes.jl")
 
-# === Main Application Logic ===
-
 const window = Ref{GLFW.Window}()
 
 function set_render_context(ctx::RenderContext)
@@ -756,6 +876,11 @@ end
 
 function initialize_render_context()
     set_render_context(RenderContext())
+end
+
+function clear()
+    glClearColor(0.0f0, 0.0f0, 0.0f0, 1.0f0)
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT)
 end
 
 function initialize(;window_width::Int = 800, window_height::Int = 600)
@@ -814,7 +939,7 @@ function initialize(;window_width::Int = 800, window_height::Int = 600)
     GLFW.SwapInterval(1)
 
     # Initial projection matrix setup
-    update_ortho_projection_matrix(window_width, window_height, scale_x)
+    update_ortho_projection_matrix(window_width, window_height, 1.0)
 
     global terminate = function ()
         @info "Cleaning up resources..."
@@ -832,12 +957,9 @@ function start_render_loop(render::Function; wait_for_events::Bool = false)
     while !GLFW.WindowShouldClose(window[])
         try
             frame_count += 1
-
-            bg_color = 0.0f0 # Gray background
-            glClearColor(bg_color, bg_color, bg_color, 1.0f0)
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT)
-
+            clear()
             render()
+
             # --- End Frame ---
             GLFW.SwapBuffers(window[])
             if wait_for_events
@@ -856,7 +978,7 @@ function start_render_loop(render::Function; wait_for_events::Bool = false)
     terminate()
 end
 
-function julia_main()::Cint
+function test_scene_2d()
     initialize()
 
     # --- Load Assets ---
@@ -1028,8 +1150,6 @@ function julia_main()::Cint
         end
         =#
     end)
-
-    return 0
 end
 
 function test_scene_3d()
@@ -1037,8 +1157,20 @@ function test_scene_3d()
 
     frame_count::Int64 = 0
 
-    test_texture = load_texture("./testimage.jpg")
+    canvas = create_canvas(24, 24)
     cube_mesh = create_cube(10.0f0)
+
+    set_canvas(canvas)
+    clear()
+    update_ortho_projection_matrix(canvas.width, canvas.height, 1.0)
+    save()
+    fillcolor(rgba(0, 0, 50, 255))
+    fillrect(0, 0, canvas.width, canvas.height)
+    translate(4, 4)
+    fillcolor(rgba(255, 255, 255, 255))
+    text(":)")
+    restore()
+    set_canvas()
 
     glEnable(GL_DEPTH_TEST)
 
@@ -1047,21 +1179,17 @@ function test_scene_3d()
         save()
         update_perspective_projection_matrix()
 
-        #translate(frame_count / 100, 0, -20)
         fillcolor(rgba(255, 255, 255, 255))
         fillrect(0, 0, 1, 1)
-        drawimage(0, 0, 1, 1, test_texture)
 
         lookat(Float32[cos(frame_count / 100) * 30, sin(frame_count / 100) * 30, 0], Float32[0, 0, 0], Float32[0, 0, 1])
 
         save()
         translate(0, 0, 10)
         scale(0.5)
-        draw_mesh(cube_mesh, test_texture)
+        draw_mesh(cube_mesh, canvas.texture)
         save()
         strokecolor(rgba(255, 0, 0, 255))
-        #fillcolor(rgba(255, 0, 0, 255))
-        #fillrect(0.0f0, 0.0f0, 100.0f0, 80.0f0)
         beginpath()
         moveto(100, 100)
         lineto(0, 0)
@@ -1075,14 +1203,16 @@ function test_scene_3d()
         translate(10, 0, 0)
         rotate(pi / 2)
         scale(0.5)
-        draw_mesh(cube_mesh, test_texture)
+        draw_mesh(cube_mesh, canvas.texture)
         restore()
 
-        #rotate(frame_count / 30.6, frame_count / 20, frame_count / 40)
-        draw_mesh(cube_mesh, test_texture)
+        rotate(frame_count / 30.6, frame_count / 20, frame_count / 40)
+        draw_mesh(cube_mesh, canvas.texture)
 
         restore()
     end)
+
+    destroy!(canvas)
 end
 
 export
