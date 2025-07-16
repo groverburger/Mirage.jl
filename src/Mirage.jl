@@ -1249,6 +1249,10 @@ export
     update_projection_matrix,
     load_texture,
     initialize,
-    start_render_loop
+    start_render_loop,
+    create_canvas,
+    set_canvas,
+    resize!,
+    destroy!
 
 end # module Mirage
