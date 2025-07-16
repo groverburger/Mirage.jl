@@ -1253,6 +1253,7 @@ export
     create_canvas,
     set_canvas,
     resize!,
-    destroy!
+    destroy!,
+    clear
 
 end # module Mirage
