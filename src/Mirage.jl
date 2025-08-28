@@ -737,8 +737,8 @@ end
 
 function circle(r::Number, x::Number = 0, y::Number = 0, segments::Int = 32)
     for i in 1:segments
-        angle::Float32 = 2.0f0 * π * (i - 1) / segments
-        next_angle::Float32 = 2.0f0 * π * i / segments
+        angle::Float32 = 2.0f0 * pi * (i - 1) / segments
+        next_angle::Float32 = 2.0f0 * pi * i / segments
         x::Float32 = r * cos(angle)
         y::Float32 = r * sin(angle)
         if i == 1
@@ -747,7 +747,7 @@ function circle(r::Number, x::Number = 0, y::Number = 0, segments::Int = 32)
             lineto(x, y)
         end
     end
-    lineto(r * cos(1 / segments), r * sin(1 / segments))
+    lineto(r * cos(2.0f0 * pi * 1 / segments), r * sin(2.0f0 * pi * 1 / segments))
 end
 
 function fillrect(x::Number, y::Number, w::Number, h::Number)
@@ -760,8 +760,8 @@ function fillcircle(radius::Number, x::Number = 0, y::Number = 0, segments::Int 
     vertices = Float32[]
 
     for i in 1:segments
-        angle::Float32 = 2.0f0 * π * (i - 1) / segments
-        next_angle::Float32 = 2.0f0 * π * i / segments
+        angle::Float32 = 2.0f0 * pi * (i - 1) / segments
+        next_angle::Float32 = 2.0f0 * pi * i / segments
 
         # Center point
         append!(vertices, 0.0f0, 0.0f0)
