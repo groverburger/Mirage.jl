@@ -167,6 +167,7 @@ end
 
 global glsl_version = ""
 global immediate_mesh = nothing
+global immediate_mesh_3d = nothing
 
 const texture_vertex_shader_source = """
     #version 330 core
@@ -486,7 +487,7 @@ end
     fill_color::Tuple{Float32, Float32, Float32, Float32} = (1, 1, 1, 1)
     stroke_color::Tuple{Float32, Float32, Float32, Float32} = (0, 0, 0, 1)
     stroke_width::Float32 = 1
-    paths::Vector{Vector{Tuple{Float32, Float32}}} = [[]]
+    paths::Vector{Vector{Tuple{Float32, Float32, Float32}}} = [[]]
     current_path_index::Int = 1
 end
 
@@ -557,6 +558,7 @@ function cleanup_render_context(ctx::RenderContext = get_context())
     glDeleteTextures(1, [ctx.blank_texture])
     glDeleteTextures(1, [ctx.font_texture])
     global immediate_mesh = nothing
+    global immediate_mesh_3d = nothing
 end
 
 save() = push!(get_context().context_stack, clone(get_context().context_stack[end]))
@@ -595,17 +597,17 @@ function beginpath()
     get_state().current_path_index = 1
 end
 
-function moveto(x::Number, y::Number)
+function moveto(x::Number, y::Number, z::Number = 0.0)
     state = get_state()
     if !isempty(state.paths[state.current_path_index])
         push!(state.paths, [])
         state.current_path_index += 1
     end
-    push!(state.paths[state.current_path_index], (Float32(x), Float32(y)))
+    push!(state.paths[state.current_path_index], (Float32(x), Float32(y), Float32(z)))
 end
 
-function lineto(x::Number, y::Number)
-    push!(get_state().paths[get_state().current_path_index], (Float32(x), Float32(y)))
+function lineto(x::Number, y::Number, z::Number = 0.0)
+    push!(get_state().paths[get_state().current_path_index], (Float32(x), Float32(y), Float32(z)))
 end
 
 function closepath()
@@ -661,7 +663,7 @@ function strokewidth(w::Number)
 end
 
 function stroke()
-    immediate_mesh = get_immediate_mesh()
+    immediate_mesh = get_immediate_mesh_3d()
     state::ContextState = get_state()
     vertices::Vector{Float32} = Float32[]
 
@@ -671,20 +673,20 @@ function stroke()
         end
 
         for i in 1:(length(path) - 1)
-            (x1, y1) = path[i]
-            (x2, y2) = path[i + 1]
+            (x1, y1, z1) = path[i]
+            (x2, y2, z2) = path[i + 1]
 
             angle::Float64 = atan(y2 - y1, x2 - x1)
             dx::Float32 = cos(angle + pi / 2) * state.stroke_width / 2
             dy::Float32 = sin(angle + pi / 2) * state.stroke_width / 2
 
             append!(vertices, Float32[
-                x1 + dx, y1 + dy, 0.0, 0.0,
-                x1 - dx, y1 - dy, 0.0, 1.0,
-                x2 + dx, y2 + dy, 1.0, 1.0,
-                x1 - dx, y1 - dy, 0.0, 1.0,
-                x2 - dx, y2 - dy, 1.0, 0.0,
-                x2 + dx, y2 + dy, 1.0, 1.0,
+                x1 + dx, y1 + dy, z1, 0.0, 0.0,
+                x1 - dx, y1 - dy, z1, 0.0, 1.0,
+                x2 + dx, y2 + dy, z2, 1.0, 1.0,
+                x1 - dx, y1 - dy, z1, 0.0, 1.0,
+                x2 - dx, y2 - dy, z2, 1.0, 0.0,
+                x2 + dx, y2 + dy, z2, 1.0, 1.0,
             ])
         end
     end
@@ -736,7 +738,7 @@ function rect(x::Number, y::Number, w::Number, h::Number)
 end
 
 function circle(r::Number, x::Number = 0, y::Number = 0, segments::Int = 32)
-    for i in 1:segments
+    for i in 0:segments
         angle::Float32 = 2.0f0 * pi * (i - 1) / segments
         next_angle::Float32 = 2.0f0 * pi * i / segments
         x::Float32 = r * cos(angle)
@@ -747,7 +749,6 @@ function circle(r::Number, x::Number = 0, y::Number = 0, segments::Int = 32)
             lineto(x, y)
         end
     end
-    lineto(r * cos(2.0f0 * pi * 1 / segments), r * sin(2.0f0 * pi * 1 / segments))
 end
 
 function fillrect(x::Number, y::Number, w::Number, h::Number)
@@ -866,6 +867,15 @@ function get_immediate_mesh()
     return immediate_mesh
 end
 
+function get_immediate_mesh_3d()
+    global immediate_mesh_3d
+    if immediate_mesh_3d == nothing || immediate_mesh_3d.vao == 0
+        @debug "Creating new immediate mesh 3D"
+        immediate_mesh_3d = create_3d_mesh()
+    end
+    return immediate_mesh_3d
+end
+
 include("./meshes.jl")
 
 const window = Ref{GLFW.Window}()
@@ -895,6 +905,7 @@ function initialize(;window_width::Int = 800, window_height::Int = 600)
     GLFW.WindowHint(GLFW.CONTEXT_VERSION_MINOR, 3)
     GLFW.WindowHint(GLFW.OPENGL_PROFILE, GLFW.OPENGL_CORE_PROFILE)
     GLFW.WindowHint(GLFW.OPENGL_FORWARD_COMPAT, GL_TRUE) # Required on macOS
+    GLFW.WindowHint(GLFW.SAMPLES, 4)
 
     # Create a windowed mode window and its OpenGL context
     window[] = GLFW.CreateWindow(window_width, window_height, "Julia OpenGL Shapes & Text Demo")
@@ -923,6 +934,7 @@ function initialize(;window_width::Int = 800, window_height::Int = 600)
     # Enable blending for text/texture transparency
     glEnable(GL_BLEND)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+    glEnable(GL_MULTISAMPLE)
 
     initialize_render_context()
     get_context().width = window_width
@@ -1054,6 +1066,7 @@ function test_scene_2d()
 
         update_ortho_projection_matrix()
         #update_perspective_projection_matrix()
+        #lookat(Float32[0, 0, -1000], Float32[0, 0, 0], Float32[0, -1, 0])
 
         # Demo drawing calls:
         # Draw a solid red rectangle
@@ -1193,7 +1206,7 @@ function test_scene_3d()
         beginpath()
         moveto(100, 100)
         lineto(0, 0)
-        lineto(-100, 0)
+        lineto(-100, 0, -50)
         stroke()
         restore()
 

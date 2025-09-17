@@ -78,7 +78,7 @@ function create_mesh(vertices::Vector{T} = Float32[0, 0, 0, 0],
     )
 end
 
-function create_3d_mesh(vertices::Vector{Float32} = Float32[0, 0, 0, 0]; kwargs...)
+function create_3d_mesh(vertices::Vector{Float32} = Float32[0, 0, 0, 0, 0]; kwargs...)
     return create_mesh(vertices, get_default_3d_attributes(); kwargs...)
 end
 
