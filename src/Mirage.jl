@@ -313,8 +313,10 @@ end
 
 function update_perspective_projection_matrix(width=get_context().width,
                                               height=get_context().height,
-                                              dpi_scaling=get_context().dpi_scaling)
-    get_state().projection = perspective(Float32(pi / 4), Float32(width / height), 0.001f0, 10_000f0)
+                                              dpi_scaling=get_context().dpi_scaling;
+                                              near = 0.01,
+                                              far = 10_000)
+    get_state().projection = perspective(Float32(pi / 4), Float32(width / height), Float32(near), Float32(far))
     glViewport(0, 0, width, height)
 end
 
