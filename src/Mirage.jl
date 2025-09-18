@@ -747,7 +747,7 @@ function circle(r::Number, x::Number = 0, y::Number = 0, segments::Int = 32)
         next_angle::Float32 = 2.0f0 * pi * i / segments
         x::Float32 = r * cos(angle)
         y::Float32 = r * sin(angle)
-        if i == 1
+        if i == 0
             moveto(x, y)
         else
             lineto(x, y)
