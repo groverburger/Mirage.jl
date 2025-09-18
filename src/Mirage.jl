@@ -410,6 +410,7 @@ commands will render to this canvas.
 function set_canvas(canvas::Canvas)
     glBindFramebuffer(GL_FRAMEBUFFER, canvas.fbo)
     glViewport(0, 0, canvas.width, canvas.height)
+    get_context().context_stack = [ContextState()]
 end
 
 """
@@ -419,6 +420,7 @@ function set_canvas()
     ctx = get_context()
     glBindFramebuffer(GL_FRAMEBUFFER, 0)
     glViewport(0, 0, ctx.width, ctx.height)
+    get_context().context_stack = [ContextState()]
 end
 
 """
