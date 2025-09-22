@@ -196,9 +196,9 @@ function create_circle(radius::Float32, segments::Int = 32)
     return create_mesh(vertices)
 end
 
-function create_cube(size::Float32 = 1.0f0)
+function create_cube(size::Number = 1.0)
     # Half size for centering
-    s = size / 2
+    s::Float32 = Float32(size / 2)
 
     # Vertices for all 6 faces of the cube (12 triangles total)
     # Each vertex has: x, y, z, u, v (position + texture coordinates)
@@ -252,5 +252,64 @@ function create_cube(size::Float32 = 1.0f0)
          s, -s,  s, 1, 1   # Top-right
     ]
 
-    return create_mesh(vertices, get_default_3d_attributes())
+    return create_3d_mesh(vertices)
+end
+
+function create_uv_sphere(radius::Number = 1.0, u_segments::Int = 32, v_segments::Int = 16)
+    vertices = Float32[]
+    r::Float32 = Float32(radius)
+    
+    for i in 0:v_segments-1
+        v1 = Float32(i) / Float32(v_segments) * pi
+        v2 = Float32(i + 1) / Float32(v_segments) * pi
+        
+        for j in 0:u_segments-1
+            u1 = Float32(j) / Float32(u_segments) * 2pi
+            u2 = Float32(j + 1) / Float32(u_segments) * 2pi
+            
+            # Calculate the four corners of the current quad
+            # Bottom-left
+            x1 = r * cos(u1) * sin(v1)
+            y1 = r * cos(v1) 
+            z1 = r * sin(u1) * sin(v1)
+            
+            # Bottom-right  
+            x2 = r * cos(u2) * sin(v1)
+            y2 = r * cos(v1)
+            z2 = r * sin(u2) * sin(v1)
+            
+            # Top-left
+            x3 = r * cos(u1) * sin(v2)
+            y3 = r * cos(v2)
+            z3 = r * sin(u1) * sin(v2)
+            
+            # Top-right
+            x4 = r * cos(u2) * sin(v2)
+            y4 = r * cos(v2)
+            z4 = r * sin(u2) * sin(v2)
+            
+            # UV coordinates
+            tex_u1 = Float32(j) / Float32(u_segments)
+            tex_u2 = Float32(j + 1) / Float32(u_segments)
+            tex_v1 = Float32(i) / Float32(v_segments)
+            tex_v2 = Float32(i + 1) / Float32(v_segments)
+            
+            # Avoid degenerate triangles at poles
+            if i > 0  # Not at north pole
+                # First triangle: bottom-left, bottom-right, top-left
+                append!(vertices, [x1, y1, z1, tex_u1, tex_v1])
+                append!(vertices, [x2, y2, z2, tex_u2, tex_v1])
+                append!(vertices, [x3, y3, z3, tex_u1, tex_v2])
+            end
+            
+            if i < v_segments - 1  # Not at south pole
+                # Second triangle: bottom-right, top-right, top-left
+                append!(vertices, [x2, y2, z2, tex_u2, tex_v1])
+                append!(vertices, [x4, y4, z4, tex_u2, tex_v2])
+                append!(vertices, [x3, y3, z3, tex_u1, tex_v2])
+            end
+        end
+    end
+    
+    return create_3d_mesh(vertices)
 end
