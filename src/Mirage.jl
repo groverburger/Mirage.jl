@@ -145,7 +145,7 @@ function create_shader(source, typ)
     return shader
 end
 
-function create_shader_program(vertex_shader, fragment_shader)
+function create_shader_program(vertex_shader::GLuint, fragment_shader::GLuint)::GLuint
     prog::GLuint = glCreateProgram()
     if prog == 0
         error("Error creating shader program: ", gl_error_message())
@@ -163,6 +163,15 @@ function create_shader_program(vertex_shader, fragment_shader)
         error("Error linking shader program: ", log)
     end
     return prog
+end
+
+function create_shader_program(vertex_shader::String, fragment_shader::String)::GLuint
+    vertex_shader_id = create_shader(vertex_shader, GL_VERTEX_SHADER)
+    fragment_shader_id = create_shader(fragment_shader, GL_FRAGMENT_SHADER)
+    shader = create_shader_program(vertex_shader_id, fragment_shader_id)
+    glDeleteShader(vertex_shader_id)
+    glDeleteShader(fragment_shader_id)
+    return shader
 end
 
 global glsl_version = ""
@@ -515,12 +524,10 @@ mutable struct RenderContext
     dpi_scaling::Number
 
     function RenderContext()::RenderContext
-        # Compile Shaders
-        texture_vs = create_shader(texture_vertex_shader_source, GL_VERTEX_SHADER)
-        texture_fs = create_shader(texture_fragment_shader_source, GL_FRAGMENT_SHADER)
-        texture_program = create_shader_program(texture_vs, texture_fs)
-        glDeleteShader(texture_vs)
-        glDeleteShader(texture_fs)
+        texture_program = create_shader_program(
+            texture_vertex_shader_source,
+            texture_fragment_shader_source
+        )
 
         shader = ShaderInfo(texture_program, Dict{String, GLint}())
         initialize_shader_uniform!(shader, "projection")
