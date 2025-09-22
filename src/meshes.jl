@@ -177,8 +177,8 @@ function create_circle(radius::Float32, segments::Int = 32)
     vertices = Float32[]
 
     for i in 1:segments
-        angle::Float32 = 2.0f0 * π * (i - 1) / segments
-        next_angle::Float32 = 2.0f0 * π * i / segments
+        angle::Float32 = 2.0f0 * pi * (i - 1) / segments
+        next_angle::Float32 = 2.0f0 * pi * i / segments
 
         # Center point
         append!(vertices, 0.0f0, 0.0f0)
