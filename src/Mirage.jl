@@ -165,13 +165,13 @@ function create_shader_program(vertex_shader::GLuint, fragment_shader::GLuint)::
     return prog
 end
 
-function create_shader_program(vertex_shader::String, fragment_shader::String)::GLuint
+function create_shader_program(vertex_shader::String, fragment_shader::String)::ShaderInfo
     vertex_shader_id = create_shader(vertex_shader, GL_VERTEX_SHADER)
     fragment_shader_id = create_shader(fragment_shader, GL_FRAGMENT_SHADER)
     shader = create_shader_program(vertex_shader_id, fragment_shader_id)
     glDeleteShader(vertex_shader_id)
     glDeleteShader(fragment_shader_id)
-    return shader
+    return ShaderInfo(shader, Dict{String, GLint}())
 end
 
 global glsl_version = ""
@@ -222,8 +222,6 @@ end
 function initialize_shader_uniform!(shader::ShaderInfo, uniform_name::String)
     shader.uniform_locations[uniform_name] = glGetUniformLocation(shader.program_id, uniform_name)
 end
-
-# === New Helper Functions ===
 
 function create_context_info()
     global glsl_version
@@ -343,13 +341,10 @@ end
 function load_texture(img_rgba::Matrix{Images.RGBA{Images.N0f8}})::GLuint
     tex_height, tex_width = size(img_rgba)
 
-    # Combine flip and transpose in a single operation
     output_img = permutedims(img_rgba[end:-1:1, :], (2, 1))
 
-    # Convert to bytes
     output_bytes = vec(reinterpret(UInt8, output_img))
 
-    # OpenGL texture creation
     tex_id = Mirage.gl_gen_texture()
     glBindTexture(GL_TEXTURE_2D, tex_id)
     gl_check_error("binding texture")
@@ -368,8 +363,6 @@ function load_texture(img_rgba::Matrix{Images.RGBA{Images.N0f8}})::GLuint
 
     return tex_id
 end
-
-# === Canvas interface ===
 
 mutable struct Canvas
     fbo::GLuint
@@ -491,8 +484,6 @@ function destroy!(canvas::Canvas)
     canvas.rbo = 0
 end
 
-# === Drawing Interface ===
-
 @kwdef mutable struct ContextState
     transform::Matrix{Float32} = Float32[1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 1]
     view::Matrix{Float32} = Float32[1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 1]
@@ -524,12 +515,11 @@ mutable struct RenderContext
     dpi_scaling::Number
 
     function RenderContext()::RenderContext
-        texture_program = create_shader_program(
+        shader = create_shader_program(
             texture_vertex_shader_source,
             texture_fragment_shader_source
         )
 
-        shader = ShaderInfo(texture_program, Dict{String, GLint}())
         initialize_shader_uniform!(shader, "projection")
         initialize_shader_uniform!(shader, "view")
         initialize_shader_uniform!(shader, "model")
@@ -1183,6 +1173,7 @@ function test_scene_3d()
 
     canvas = create_canvas(24, 24)
     cube_mesh = create_cube(10.0f0)
+    sphere_mesh = create_uv_sphere(4.0f0)
 
     set_canvas(canvas)
     clear()
@@ -1231,7 +1222,7 @@ function test_scene_3d()
         restore()
 
         rotate(frame_count / 30.6, frame_count / 20, frame_count / 40)
-        draw_mesh(cube_mesh, canvas.texture)
+        draw_mesh(sphere_mesh, canvas.texture)
 
         restore()
     end)
