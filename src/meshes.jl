@@ -313,3 +313,39 @@ function create_uv_sphere(radius::Number = 1.0, u_segments::Int = 32, v_segments
     
     return create_3d_mesh(vertices)
 end
+
+function load_obj_mesh(filepath::String)
+    vertices = Float32[]
+    positions = Vector{Vector{Float32}}()
+    texcoords = Vector{Vector{Float32}}()
+
+    open(filepath, "r") do f
+        for line in eachline(f)
+            parts = split(line)
+            if isempty(parts) continue end
+
+            if parts[1] == "v"
+                push!(positions, [parse(Float32, parts[2]), parse(Float32, parts[3]), parse(Float32, parts[4])])
+            elseif parts[1] == "vt"
+                push!(texcoords, [parse(Float32, parts[2]), parse(Float32, parts[3])])
+            elseif parts[1] == "f"
+                # Assuming triangular faces and v/vt format
+                # This simple parser assumes faces are triangulated in the OBJ file
+                # and that each vertex has position and texture coordinate indices.
+                # It also assumes 1-based indexing for OBJ.
+                for i in 2:length(parts)
+                    v_vt_n = split(parts[i], '/')
+                    v_idx = parse(Int, v_vt_n[1])
+                    vt_idx = parse(Int, v_vt_n[2])
+
+                    pos = positions[v_idx]
+                    tc = texcoords[vt_idx]
+
+                    append!(vertices, pos[1], pos[2], pos[3], tc[1], tc[2])
+                end
+            end
+        end
+    end
+    
+    return create_3d_mesh(vertices)
+end

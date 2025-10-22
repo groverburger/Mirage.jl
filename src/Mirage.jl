@@ -1174,6 +1174,7 @@ function test_scene_3d()
     canvas = create_canvas(24, 24)
     cube_mesh = create_cube(10.0f0)
     sphere_mesh = create_uv_sphere(4.0f0)
+    obj_mesh = load_obj_mesh("cube.obj")
 
     set_canvas(canvas)
     clear()
@@ -1218,7 +1219,7 @@ function test_scene_3d()
         translate(10, 0, 0)
         rotate(pi / 2)
         scale(0.5)
-        draw_mesh(cube_mesh, canvas.texture)
+        draw_mesh(obj_mesh, canvas.texture)
         restore()
 
         rotate(frame_count / 30.6, frame_count / 20, frame_count / 40)
@@ -1228,6 +1229,7 @@ function test_scene_3d()
     end)
 
     destroy!(canvas)
+    destroy_mesh(obj_mesh)
 end
 
 export
@@ -1269,6 +1271,7 @@ export
     set_canvas,
     resize!,
     destroy!,
-    clear
+    clear,
+    load_obj_mesh
 
 end # module Mirage
