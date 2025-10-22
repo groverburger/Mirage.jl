@@ -329,19 +329,38 @@ function load_obj_mesh(filepath::String)
             elseif parts[1] == "vt"
                 push!(texcoords, [parse(Float32, parts[2]), parse(Float32, parts[3])])
             elseif parts[1] == "f"
-                # Assuming triangular faces and v/vt format
-                # This simple parser assumes faces are triangulated in the OBJ file
-                # and that each vertex has position and texture coordinate indices.
-                # It also assumes 1-based indexing for OBJ.
+                # Triangulate faces with more than 3 vertices (N-gons)
+                # Assumes 1-based indexing for OBJ.
+                face_vertices = []
                 for i in 2:length(parts)
                     v_vt_n = split(parts[i], '/')
                     v_idx = parse(Int, v_vt_n[1])
                     vt_idx = parse(Int, v_vt_n[2])
+                    push!(face_vertices, (v_idx, vt_idx))
+                end
 
-                    pos = positions[v_idx]
-                    tc = texcoords[vt_idx]
+                # Fan triangulation
+                if length(face_vertices) >= 3
+                    # First vertex of the face is the common vertex for the fan
+                    v1_idx, vt1_idx = face_vertices[1]
+                    pos1 = positions[v1_idx]
+                    tc1 = texcoords[vt1_idx]
 
-                    append!(vertices, pos[1], pos[2], pos[3], tc[1], tc[2])
+                    for i in 2:(length(face_vertices) - 1)
+                        # Second vertex of the triangle
+                        v2_idx, vt2_idx = face_vertices[i]
+                        pos2 = positions[v2_idx]
+                        tc2 = texcoords[vt2_idx]
+
+                        # Third vertex of the triangle
+                        v3_idx, vt3_idx = face_vertices[i+1]
+                        pos3 = positions[v3_idx]
+                        tc3 = texcoords[vt3_idx]
+
+                        append!(vertices, pos1[1], pos1[2], pos1[3], tc1[1], tc1[2])
+                        append!(vertices, pos2[1], pos2[2], pos2[3], tc2[1], tc2[2])
+                        append!(vertices, pos3[1], pos3[2], pos3[3], tc3[1], tc3[2])
+                    end
                 end
             end
         end
