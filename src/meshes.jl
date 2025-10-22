@@ -1,4 +1,16 @@
 # Represents a single vertex attribute (position, normal, etc.)
+"""
+    VertexAttribute
+
+Represents a single vertex attribute (e.g., position, normal, texture coordinates).
+
+# Fields
+- `location::Int`: The shader location of the attribute.
+- `size::Int`: The number of components per attribute (e.g., 2 for `vec2`, 3 for `vec3`).
+- `type::GLenum`: The OpenGL data type of each component (e.g., `GL_FLOAT`).
+- `normalized::Bool`: Whether fixed-point data should be normalized to [0,1] or [-1,1].
+- `offset::Int`: The byte offset of the attribute within the vertex data.
+"""
 struct VertexAttribute
     location::Int      # Shader location
     size::Int          # Number of components (e.g., 3 for vec3)
@@ -9,12 +21,12 @@ end
 
 # Simplified mesh with just one VBO and no EBO
 mutable struct Mesh
-    vao::GLuint
-    vbo::GLuint
-    vertex_count::Int
-    draw_mode::GLenum  # GL_TRIANGLES, etc.
-    stride::Int        # Total bytes per vertex
-    attributes::Vector{VertexAttribute}
+    vao::GLuint        # Vertex Array Object ID
+    vbo::GLuint        # Vertex Buffer Object ID
+    vertex_count::Int  # Number of vertices in the mesh
+    draw_mode::GLenum  # OpenGL primitive type (e.g., GL_TRIANGLES, GL_LINES)
+    stride::Int        # Byte stride between vertices
+    attributes::Vector{VertexAttribute} # Vertex attribute configurations
 end
 
 get_default_attributes() = [
@@ -27,6 +39,21 @@ get_default_3d_attributes() = [
     VertexAttribute(1, 2, GL_FLOAT, false, 3 * sizeof(Float32))   # Texture coordinates (u, v)]
 ]
 
+"""
+    create_mesh(vertices::Vector{T} = Float32[0, 0, 0, 0],
+                attributes::Vector{VertexAttribute} = get_default_attributes();
+                draw_mode::GLenum = GL_TRIANGLES) where T
+
+Creates a new `Mesh` object and uploads vertex data to the GPU.
+
+# Arguments
+- `vertices`: A vector of vertex data. The layout should match the `attributes`.
+- `attributes`: A vector of `VertexAttribute` defining the layout of the vertex data.
+- `draw_mode`: The OpenGL primitive type to use when drawing the mesh (defaults to `GL_TRIANGLES`).
+
+# Returns
+A new `Mesh` object.
+"""
 function create_mesh(vertices::Vector{T} = Float32[0, 0, 0, 0],
                      attributes::Vector{VertexAttribute} = get_default_attributes();
                      draw_mode::GLenum = GL_TRIANGLES) where T
@@ -78,10 +105,32 @@ function create_mesh(vertices::Vector{T} = Float32[0, 0, 0, 0],
     )
 end
 
+"""
+    create_3d_mesh(vertices::Vector{Float32} = Float32[0, 0, 0, 0, 0]; kwargs...)
+
+Creates a new 3D `Mesh` object with default 3D attributes and uploads vertex data to the GPU.
+
+# Arguments
+- `vertices`: A vector of vertex data. Expected format is `[x, y, z, u, v, ...]`. Defaults to a single dummy vertex.
+- `kwargs...`: Additional keyword arguments passed to `create_mesh` (e.g., `draw_mode`).
+
+# Returns
+A new `Mesh` object configured for 3D rendering.
+"""
 function create_3d_mesh(vertices::Vector{Float32} = Float32[0, 0, 0, 0, 0]; kwargs...)
     return create_mesh(vertices, get_default_3d_attributes(); kwargs...)
 end
 
+"""
+    draw_mesh(mesh::Mesh, texture_id::GLuint, tint_color::Vector{Float32})
+
+Draws a mesh with a specified texture and tint color.
+
+# Arguments
+- `mesh`: The `Mesh` object to draw.
+- `texture_id`: The OpenGL ID of the texture to apply.
+- `tint_color`: A `Vector{Float32}` representing the RGBA tint color.
+"""
 function draw_mesh(mesh::Mesh, texture_id::GLuint, tint_color::Vector{Float32})
     ctx::RenderContext = get_context()
     glUseProgram(ctx.shader.program_id)
@@ -107,26 +156,74 @@ function draw_mesh(mesh::Mesh, texture_id::GLuint, tint_color::Vector{Float32})
     glUseProgram(0)
 end
 
+"""
+    draw_mesh(mesh::Mesh, texture_id::GLuint)
+
+Draws a mesh with a specified texture, using the current fill color from the `ContextState` as tint.
+
+# Arguments
+- `mesh`: The `Mesh` object to draw.
+- `texture_id`: The OpenGL ID of the texture to apply.
+"""
 function draw_mesh(mesh::Mesh, texture_id::GLuint)
     draw_mesh(mesh, texture_id, Float32[get_state().fill_color...])
 end
 
+"""
+    draw_mesh(mesh::Mesh, tint_color::Vector{Float32})
+
+Draws a mesh with a specified tint color, using a blank texture.
+
+# Arguments
+- `mesh`: The `Mesh` object to draw.
+- `tint_color`: A `Vector{Float32}` representing the RGBA tint color.
+"""
 function draw_mesh(mesh::Mesh, tint_color::Vector{Float32})
     ctx::RenderContext = get_context()
     draw_mesh(mesh, ctx.blank_texture, tint_color)
 end
 
+"""
+    draw_mesh(mesh::Mesh)
+
+Draws a mesh using a blank texture and the current fill color from the `ContextState`.
+
+# Arguments
+- `mesh`: The `Mesh` object to draw.
+"""
 function draw_mesh(mesh::Mesh)
     ctx::RenderContext = get_context()
     draw_mesh(mesh, ctx.blank_texture)
 end
 
+"""
+    count_vertices(attributes::Vector, vertices::Vector)
+
+Calculates the number of vertices in a vertex data vector based on the provided attributes.
+
+# Arguments
+- `attributes`: A vector of `VertexAttribute` defining the layout of the vertex data.
+- `vertices`: The raw vertex data vector.
+
+# Returns
+The number of vertices.
+"""
 function count_vertices(attributes::Vector, vertices::Vector)
     stride::Int = sum([attr.size for attr in attributes])
     return div(length(vertices), stride)
 end
 
 # Update vertex data (for dynamic meshes)
+"""
+    update_mesh_vertices!(mesh::Mesh, vertices::Vector{Float32}, usage::GLenum = GL_DYNAMIC_DRAW)
+
+Updates the vertex data of an existing mesh on the GPU.
+
+# Arguments
+- `mesh`: The `Mesh` object to update.
+- `vertices`: The new vertex data.
+- `usage`: The OpenGL usage hint for the buffer (defaults to `GL_DYNAMIC_DRAW`).
+"""
 function update_mesh_vertices!(mesh::Mesh, vertices::Vector{Float32}, usage::GLenum = GL_DYNAMIC_DRAW)
     glBindVertexArray(mesh.vao)
     glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo)
@@ -137,6 +234,14 @@ function update_mesh_vertices!(mesh::Mesh, vertices::Vector{Float32}, usage::GLe
 end
 
 # Destroy mesh and free GPU resources
+"""
+    destroy_mesh(mesh::Mesh)
+
+Frees the GPU resources (VAO and VBO) associated with a `Mesh` object.
+
+# Arguments
+- `mesh`: The `Mesh` object to destroy.
+"""
 function destroy_mesh(mesh::Mesh)
     # Delete VBO
     if mesh.vbo != 0
@@ -155,6 +260,18 @@ function destroy_mesh(mesh::Mesh)
 end
 
 # Example: Create a quad mesh using triangles
+"""
+    create_quad(width::Float32, height::Float32)
+
+Creates a 2D quad mesh with position and texture coordinates.
+
+# Arguments
+- `width`: The width of the quad.
+- `height`: The height of the quad.
+
+# Returns
+A `Mesh` object representing the quad.
+"""
 function create_quad(width::Float32, height::Float32)
     # Positions (x, y) and texture coordinates (u, v) for 6 vertices (2 triangles)
     x = width / 2
@@ -171,6 +288,18 @@ function create_quad(width::Float32, height::Float32)
     return create_mesh(vertices)
 end
 
+"""
+    create_circle(radius::Float32, segments::Int = 32)
+
+Creates a 2D circle mesh, triangulated as a fan from the center.
+
+# Arguments
+- `radius`: The radius of the circle.
+- `segments`: The number of segments to use for approximating the circle (defaults to 32).
+
+# Returns
+A `Mesh` object representing the circle.
+"""
 function create_circle(radius::Float32, segments::Int = 32)
     # Create triangles by connecting center to each pair of consecutive vertices
     # This creates a fan-like triangulation
@@ -196,6 +325,17 @@ function create_circle(radius::Float32, segments::Int = 32)
     return create_mesh(vertices)
 end
 
+"""
+    create_cube(size::Number = 1.0)
+
+Creates a 3D cube mesh with position and texture coordinates for each face.
+
+# Arguments
+- `size`: The side length of the cube (defaults to 1.0).
+
+# Returns
+A `Mesh` object representing the cube.
+"""
 function create_cube(size::Number = 1.0)
     # Half size for centering
     s::Float32 = Float32(size / 2)
@@ -255,6 +395,19 @@ function create_cube(size::Number = 1.0)
     return create_3d_mesh(vertices)
 end
 
+"""
+    create_uv_sphere(radius::Number = 1.0, u_segments::Int = 32, v_segments::Int = 16)
+
+Creates a UV sphere mesh with position and texture coordinates.
+
+# Arguments
+- `radius`: The radius of the sphere (defaults to 1.0).
+- `u_segments`: The number of segments around the equator (defaults to 32).
+- `v_segments`: The number of segments along the height (defaults to 16).
+
+# Returns
+A `Mesh` object representing the UV sphere.
+"""
 function create_uv_sphere(radius::Number = 1.0, u_segments::Int = 32, v_segments::Int = 16)
     vertices = Float32[]
     r::Float32 = Float32(radius)
@@ -314,6 +467,17 @@ function create_uv_sphere(radius::Number = 1.0, u_segments::Int = 32, v_segments
     return create_3d_mesh(vertices)
 end
 
+"""
+    load_obj_mesh(filepath::String)
+
+Loads a 3D mesh from an OBJ file. Supports positions and texture coordinates.
+
+# Arguments
+- `filepath`: The path to the OBJ file.
+
+# Returns
+A `Mesh` object representing the loaded model.
+"""
 function load_obj_mesh(filepath::String)
     vertices = Float32[]
     positions = Vector{Vector{Float32}}()

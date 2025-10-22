@@ -7,6 +7,20 @@ using FileIO
 using ImageIO
 using Images
 
+"""
+    translate!(matrix::Matrix{T}, tx::Real, ty::Real, tz::Real = 0.0) where T
+
+Applies a translation to a 4x4 transformation matrix in-place.
+
+# Arguments
+- `matrix`: The 4x4 transformation matrix to modify.
+- `tx`: The translation amount along the x-axis.
+- `ty`: The translation amount along the y-axis.
+- `tz`: The translation amount along the z-axis (defaults to 0.0).
+
+# Returns
+The modified transformation matrix.
+"""
 function translate!(matrix::Matrix{T}, tx::Real, ty::Real, tz::Real = 0.0) where T
     translation = T[
         1.0 0.0 0.0 tx;
@@ -21,6 +35,18 @@ function translate!(matrix::Matrix{T}, tx::Real, ty::Real, tz::Real = 0.0) where
     return matrix
 end
 
+"""
+    rotate!(matrix::Matrix{T}, angle::Real) where T
+
+Applies a 2D rotation around the Z-axis to a 4x4 transformation matrix in-place.
+
+# Arguments
+- `matrix`: The 4x4 transformation matrix to modify.
+- `angle`: The rotation angle in radians.
+
+# Returns
+The modified transformation matrix.
+"""
 function rotate!(matrix::Matrix{T}, angle::Real) where T
     c = cos(angle)
     s = sin(angle)
@@ -37,6 +63,22 @@ function rotate!(matrix::Matrix{T}, angle::Real) where T
     return matrix
 end
 
+"""
+    rotate!(matrix::Matrix{T}, angle::Real, axis::Vector{T}) where T
+
+Applies a 3D rotation around a specified axis to a 4x4 transformation matrix in-place.
+
+# Arguments
+- `matrix`: The 4x4 transformation matrix to modify.
+- `angle`: The rotation angle in radians.
+- `axis`: A 3-element vector specifying the rotation axis.
+
+# Throws
+- `ArgumentError`: If the axis is not a 3-element vector or is a zero vector.
+
+# Returns
+The modified transformation matrix.
+"""
 function rotate!(matrix::Matrix{T}, angle::Real, axis::Vector{T}) where T
     # Validate axis input
     length(axis) == 3 || throw(ArgumentError("Axis must be 3-element vector"))
@@ -68,6 +110,20 @@ function rotate!(matrix::Matrix{T}, angle::Real, axis::Vector{T}) where T
     return matrix
 end
 
+"""
+    scale!(matrix::Matrix{T}, sx::Real, sy::Real, sz::Real = 1.0) where T
+
+Applies a scaling transformation to a 4x4 transformation matrix in-place.
+
+# Arguments
+- `matrix`: The 4x4 transformation matrix to modify.
+- `sx`: The scaling factor along the x-axis.
+- `sy`: The scaling factor along the y-axis.
+- `sz`: The scaling factor along the z-axis (defaults to 1.0).
+
+# Returns
+The modified transformation matrix.
+"""
 function scale!(matrix::Matrix{T}, sx::Real, sy::Real, sz::Real = 1.0) where T
     scaling = T[
         sx  0.0  0.0  0.0;
@@ -82,6 +138,17 @@ function scale!(matrix::Matrix{T}, sx::Real, sy::Real, sz::Real = 1.0) where T
     return matrix
 end
 
+"""
+    gl_gen_one(gl_gen_fn)
+
+Generates a single OpenGL object (buffer, vertex array, or texture) using the provided generation function.
+
+# Arguments
+- `gl_gen_fn`: The OpenGL generation function (e.g., `glGenBuffers`, `glGenVertexArrays`, `glGenTextures`).
+
+# Returns
+The ID of the generated OpenGL object.
+"""
 function gl_gen_one(gl_gen_fn)
     id = GLuint[0]
     gl_gen_fn(1, id)
@@ -89,10 +156,47 @@ function gl_gen_one(gl_gen_fn)
     id[]
 end
 
+"""
+    gl_gen_buffer()
+
+Generates a single OpenGL buffer object.
+
+# Returns
+The ID of the generated buffer object.
+"""
 gl_gen_buffer() = gl_gen_one(glGenBuffers)
+
+"""
+    gl_gen_vertex_array()
+
+Generates a single OpenGL vertex array object.
+
+# Returns
+The ID of the generated vertex array object.
+"""
 gl_gen_vertex_array() = gl_gen_one(glGenVertexArrays)
+
+"""
+    gl_gen_texture()
+
+Generates a single OpenGL texture object.
+
+# Returns
+The ID of the generated texture object.
+"""
 gl_gen_texture() = gl_gen_one(glGenTextures)
 
+"""
+    get_info_log(obj::GLuint)
+
+Retrieves the info log for an OpenGL shader or program object.
+
+# Arguments
+- `obj`: The ID of the shader or program object.
+
+# Returns
+A string containing the info log, or an empty string if no log is available.
+"""
 function get_info_log(obj::GLuint)
     is_shader = glIsShader(obj)
     get_iv = is_shader == GL_TRUE ? glGetShaderiv : glGetProgramiv
@@ -111,12 +215,31 @@ function get_info_log(obj::GLuint)
     end
 end
 
+"""
+    validate_shader(shader)
+
+Checks if an OpenGL shader compilation was successful.
+
+# Arguments
+- `shader`: The ID of the shader object.
+
+# Returns
+`true` if the shader compiled successfully, `false` otherwise.
+"""
 function validate_shader(shader)
     success = GLint[0]
     glGetShaderiv(shader, GL_COMPILE_STATUS, success)
     success[] == GL_TRUE
 end
 
+"""
+    gl_error_message()
+
+Retrieves the current OpenGL error message as a string.
+
+# Returns
+A string describing the OpenGL error, or an empty string if no error occurred.
+"""
 function gl_error_message()
     err = glGetError()
     err == GL_NO_ERROR ? "" :
@@ -127,6 +250,17 @@ function gl_error_message()
         err == GL_OUT_OF_MEMORY ? "GL_OUT_OF_MEMORY" : "Unknown OpenGL error code $err."
 end
 
+"""
+    gl_check_error(action_name="")
+
+Checks for OpenGL errors and throws an `error` if one is found.
+
+# Arguments
+- `action_name`: An optional string describing the action being performed when the error check occurs.
+
+# Throws
+- `error`: If an OpenGL error is detected.
+"""
 function gl_check_error(action_name="")
     message = gl_error_message()
     if length(message) > 0
@@ -134,6 +268,21 @@ function gl_check_error(action_name="")
     end
 end
 
+"""
+    create_shader(source, typ)
+
+Creates and compiles an OpenGL shader from source.
+
+# Arguments
+- `source`: A string containing the shader source code.
+- `typ`: The type of shader to create (e.g., `GL_VERTEX_SHADER`, `GL_FRAGMENT_SHADER`).
+
+# Returns
+The ID of the compiled shader.
+
+# Throws
+- `error`: If shader creation or compilation fails.
+"""
 function create_shader(source, typ)
     shader::GLuint = glCreateShader(typ)
     if shader == 0
@@ -145,6 +294,21 @@ function create_shader(source, typ)
     return shader
 end
 
+"""
+    create_shader_program(vertex_shader::GLuint, fragment_shader::GLuint)::GLuint
+
+Creates an OpenGL shader program by linking a vertex and a fragment shader.
+
+# Arguments
+- `vertex_shader`: The ID of the vertex shader.
+- `fragment_shader`: The ID of the fragment shader.
+
+# Returns
+The ID of the linked shader program.
+
+# Throws
+- `error`: If program creation or linking fails.
+"""
 function create_shader_program(vertex_shader::GLuint, fragment_shader::GLuint)::GLuint
     prog::GLuint = glCreateProgram()
     if prog == 0
@@ -165,6 +329,18 @@ function create_shader_program(vertex_shader::GLuint, fragment_shader::GLuint)::
     return prog
 end
 
+"""
+    create_shader_program(vertex_shader::String, fragment_shader::String)::ShaderInfo
+
+Creates an OpenGL shader program from vertex and fragment shader source strings.
+
+# Arguments
+- `vertex_shader`: A string containing the vertex shader source code.
+- `fragment_shader`: A string containing the fragment shader source code.
+
+# Returns
+A `ShaderInfo` object containing the program ID and a dictionary for uniform locations.
+"""
 function create_shader_program(vertex_shader::String, fragment_shader::String)::ShaderInfo
     vertex_shader_id = create_shader(vertex_shader, GL_VERTEX_SHADER)
     fragment_shader_id = create_shader(fragment_shader, GL_FRAGMENT_SHADER)
@@ -219,10 +395,30 @@ struct ShaderInfo
     uniform_locations::Dict{String, GLint}
 end
 
+"""
+    initialize_shader_uniform!(shader::ShaderInfo, uniform_name::String)
+
+Retrieves the location of a uniform variable in a shader program and stores it in the `ShaderInfo` object.
+
+# Arguments
+- `shader`: The `ShaderInfo` object representing the shader program.
+- `uniform_name`: The name of the uniform variable.
+"""
 function initialize_shader_uniform!(shader::ShaderInfo, uniform_name::String)
     shader.uniform_locations[uniform_name] = glGetUniformLocation(shader.program_id, uniform_name)
 end
 
+"""
+    create_context_info()
+
+Retrieves and processes OpenGL context information, including GLSL version, OpenGL version, vendor, and renderer.
+
+# Returns
+A dictionary containing OpenGL context details.
+
+# Throws
+- `error`: If the GLSL or OpenGL version strings are in an unexpected format.
+"""
 function create_context_info()
     global glsl_version
     glsl = split(unsafe_string(glGetString(GL_SHADING_LANGUAGE_VERSION)), ['.', ' '])
@@ -254,6 +450,22 @@ end
 
 # Orthographic projection matrix
 # Maps x=[left, right] to [-1, 1] and y=[top, bottom] to [1, -1] (OpenGL coords)
+"""
+    ortho(left::Float32, right::Float32, bottom::Float32, top::Float32, zNear::Float32 = -1.0f0, zFar::Float32 = 1.0f0)::Matrix{Float32}
+
+Creates an orthographic projection matrix.
+
+# Arguments
+- `left`: The x-coordinate of the left vertical clipping plane.
+- `right`: The x-coordinate of the right vertical clipping plane.
+- `bottom`: The y-coordinate of the bottom horizontal clipping plane.
+- `top`: The y-coordinate of the top horizontal clipping plane.
+- `zNear`: The distance to the near clipping plane (defaults to -1.0f0).
+- `zFar`: The distance to the far clipping plane (defaults to 1.0f0).
+
+# Returns
+A 4x4 orthographic projection matrix.
+"""
 function ortho(left::Float32, right::Float32, bottom::Float32, top::Float32, zNear::Float32 = -1.0f0, zFar::Float32 = 1.0f0)::Matrix{Float32}
     mat = zeros(Float32, 4, 4)
     mat[1, 1] = 2.0f0 / (right - left)
@@ -266,6 +478,20 @@ function ortho(left::Float32, right::Float32, bottom::Float32, top::Float32, zNe
     return mat
 end
 
+"""
+    perspective(fov::Float32, aspectRatio::Float32, near::Float32, far::Float32)::Matrix{Float32}
+
+Creates a perspective projection matrix.
+
+# Arguments
+- `fov`: The field of view in radians.
+- `aspectRatio`: The aspect ratio of the viewport (width / height).
+- `near`: The distance to the near clipping plane.
+- `far`: The distance to the far clipping plane.
+
+# Returns
+A 4x4 perspective projection matrix.
+"""
 function perspective(fov::Float32, aspectRatio::Float32, near::Float32, far::Float32)::Matrix{Float32}
     top = near * tan(fov/2)
     bottom = -1*top
@@ -280,6 +506,19 @@ function perspective(fov::Float32, aspectRatio::Float32, near::Float32, far::Flo
     ]
 end
 
+"""
+    view(position, target, up = [0, 0, 1])
+
+Creates a view matrix (camera matrix) that transforms world coordinates to view coordinates.
+
+# Arguments
+- `position`: The position of the camera in world space.
+- `target`: The point in world space that the camera is looking at.
+- `up`: The up direction of the camera (defaults to `[0, 0, 1]`).
+
+# Returns
+A 4x4 view matrix.
+"""
 function view(position, target, up = [0, 0, 1])
   z = normalize(position - target)
   x = normalize(cross(up, z))
@@ -293,11 +532,34 @@ function view(position, target, up = [0, 0, 1])
   ]
 end
 
+"""
+    normalize(v::Vector{Float32})::Vector{Float32}
+
+Normalizes a 3-element Float32 vector.
+
+# Arguments
+- `v`: The input vector.
+
+# Returns
+The normalized vector.
+"""
 function normalize(v::Vector{Float32})::Vector{Float32}
     len = sqrt(sum(v .^ 2))
     return len > 0.0f0 ? v ./ len : v
 end
 
+"""
+    cross(a::Vector{Float32}, b::Vector{Float32})::Vector{Float32}
+
+Computes the cross product of two 3-element Float32 vectors.
+
+# Arguments
+- `a`: The first vector.
+- `b`: The second vector.
+
+# Returns
+The cross product vector.
+"""
 function cross(a::Vector{Float32}, b::Vector{Float32})::Vector{Float32}
     return Float32[
         a[2] * b[3] - a[3] * b[2],
@@ -306,10 +568,35 @@ function cross(a::Vector{Float32}, b::Vector{Float32})::Vector{Float32}
     ]
 end
 
+"""
+    dot(a::Vector{Float32}, b::Vector{Float32})::Float32
+
+Computes the dot product of two 3-element Float32 vectors.
+
+# Arguments
+- `a`: The first vector.
+- `b`: The second vector.
+
+# Returns
+The dot product (a scalar value).
+"""
 function dot(a::Vector{Float32}, b::Vector{Float32})::Float32
     return sum(a .* b)
 end
 
+"""
+    update_ortho_projection_matrix(width=get_context().width,
+                                   height=get_context().height,
+                                   dpi_scaling=get_context().dpi_scaling)
+
+Updates the orthographic projection matrix based on the current context's width, height, and DPI scaling.
+Also sets the OpenGL viewport.
+
+# Arguments
+- `width`: The width of the viewport (defaults to `get_context().width`).
+- `height`: The height of the viewport (defaults to `get_context().height`).
+- `dpi_scaling`: The DPI scaling factor (defaults to `get_context().dpi_scaling`).
+"""
 function update_ortho_projection_matrix(width=get_context().width,
                                         height=get_context().height,
                                         dpi_scaling=get_context().dpi_scaling)
@@ -318,6 +605,23 @@ function update_ortho_projection_matrix(width=get_context().width,
     glViewport(0, 0, width, height)
 end
 
+"""
+    update_perspective_projection_matrix(width=get_context().width,
+                                         height=get_context().height,
+                                         dpi_scaling=get_context().dpi_scaling;
+                                         near = 0.01,
+                                         far = 10_000)
+
+Updates the perspective projection matrix based on the current context's width, height, and DPI scaling.
+Also sets the OpenGL viewport.
+
+# Arguments
+- `width`: The width of the viewport (defaults to `get_context().width`).
+- `height`: The height of the viewport (defaults to `get_context().height`).
+- `dpi_scaling`: The DPI scaling factor (defaults to `get_context().dpi_scaling`).
+- `near`: The distance to the near clipping plane (defaults to 0.01).
+- `far`: The distance to the far clipping plane (defaults to 10_000).
+"""
 function update_perspective_projection_matrix(width=get_context().width,
                                               height=get_context().height,
                                               dpi_scaling=get_context().dpi_scaling;
@@ -327,6 +631,20 @@ function update_perspective_projection_matrix(width=get_context().width,
     glViewport(0, 0, width, height)
 end
 
+"""
+    load_texture(filepath::String)::GLuint
+
+Loads an image from the specified filepath and creates an OpenGL texture from it.
+
+# Arguments
+- `filepath`: The path to the image file.
+
+# Returns
+The ID of the created OpenGL texture.
+
+# Throws
+- `error`: If the image cannot be loaded.
+"""
 function load_texture(filepath::String)::GLuint
     try
         img = FileIO.load(filepath)
@@ -338,6 +656,17 @@ function load_texture(filepath::String)::GLuint
     end
 end
 
+"""
+    load_texture(img_rgba::Matrix{Images.RGBA{Images.N0f8}})::GLuint
+
+Creates an OpenGL texture from a given RGBA image matrix.
+
+# Arguments
+- `img_rgba`: A matrix of `RGBA{N0f8}` representing the image data.
+
+# Returns
+The ID of the created OpenGL texture.
+"""
 function load_texture(img_rgba::Matrix{Images.RGBA{Images.N0f8}})::GLuint
     tex_height, tex_width = size(img_rgba)
 
@@ -372,6 +701,21 @@ mutable struct Canvas
     height::Int
 end
 
+"""
+    create_canvas(width::Int, height::Int)
+
+Creates a new `Canvas` object, which encapsulates an OpenGL framebuffer, texture, and renderbuffer for offscreen rendering.
+
+# Arguments
+- `width`: The width of the canvas in pixels.
+- `height`: The height of the canvas in pixels.
+
+# Returns
+A `Canvas` object.
+
+# Throws
+- `@error`: If the framebuffer is not complete after creation.
+"""
 function create_canvas(width::Int, height::Int)
     # Generate Framebuffer
     fbo = gl_gen_one(glGenFramebuffers)
@@ -495,6 +839,17 @@ end
     current_path_index::Int = 1
 end
 
+"""
+    clone(x::ContextState)
+
+Creates a deep copy of a `ContextState` object.
+
+# Arguments
+- `x`: The `ContextState` object to clone.
+
+# Returns
+A new `ContextState` object with identical, but independent, field values.
+"""
 function clone(x::ContextState)
     fields = fieldnames(ContextState)
     kwargs = Dict{Symbol, Any}(field => deepcopy(getfield(x, field)) for field in fields)
@@ -514,6 +869,14 @@ mutable struct RenderContext
     height::Int
     dpi_scaling::Number
 
+    """
+    RenderContext()
+
+Constructs a new `RenderContext` object, initializing OpenGL shaders, textures, and context state.
+
+# Returns
+A new `RenderContext` instance.
+"""
     function RenderContext()::RenderContext
         shader = create_shader_program(
             texture_vertex_shader_source,
@@ -554,6 +917,14 @@ end
 
 const render_context = Ref{RenderContext}()
 
+"""
+    cleanup_render_context(ctx::RenderContext = get_context())
+
+Cleans up OpenGL resources associated with a `RenderContext`, including shader programs and textures.
+
+# Arguments
+- `ctx`: The `RenderContext` to clean up (defaults to the current context).
+"""
 function cleanup_render_context(ctx::RenderContext = get_context())
     glDeleteProgram(ctx.shader.program_id)
     glDeleteTextures(1, [ctx.blank_texture])
@@ -562,42 +933,137 @@ function cleanup_render_context(ctx::RenderContext = get_context())
     global immediate_mesh_3d = nothing
 end
 
+"""
+    save()
+
+Pushes a copy of the current `ContextState` onto the context stack, effectively saving the current drawing state.
+"""
 save() = push!(get_context().context_stack, clone(get_context().context_stack[end]))
 
+"""
+    restore()
+
+Pops the last saved `ContextState` from the context stack, restoring the previous drawing state.
+"""
 restore() = pop!(get_context().context_stack)
 
+"""
+    get_context()
+
+Retrieves the global `RenderContext` instance.
+
+# Returns
+The global `RenderContext`.
+"""
 get_context() = render_context[]
 
+"""
+    get_state()
+
+Retrieves the current `ContextState` from the top of the context stack.
+
+# Returns
+The current `ContextState`.
+"""
 get_state() = get_context().context_stack[end]
 
+"""
+    translate(dx::Number, dy::Number, dz::Number = 0)
+
+Applies a translation to the current transformation matrix in the `ContextState`.
+
+# Arguments
+- `dx`: The translation amount along the x-axis.
+- `dy`: The translation amount along the y-axis.
+- `dz`: The translation amount along the z-axis (defaults to 0).
+"""
 function translate(dx::Number, dy::Number, dz::Number = 0)
     translate!(get_state().transform, dx, dy, dz)
 end
 
+"""
+    scale(dx::Number, dy::Number, dz::Number = 1)
+
+Applies a scaling transformation to the current transformation matrix in the `ContextState`.
+
+# Arguments
+- `dx`: The scaling factor along the x-axis.
+- `dy`: The scaling factor along the y-axis.
+- `dz`: The scaling factor along the z-axis (defaults to 1).
+"""
 function scale(dx::Number, dy::Number, dz::Number = 1)
     scale!(get_state().transform, dx, dy, dz)
 end
+"""
+    scale(n::Number)
+
+Applies a uniform scaling transformation to the current transformation matrix in the `ContextState`.
+
+# Arguments
+- `n`: The uniform scaling factor for all axes.
+"""
 scale(n::Number) = scale(n, n, n)
 
+"""
+    rotate(angle::Number)
+
+Applies a 2D rotation around the Z-axis to the current transformation matrix in the `ContextState`.
+
+# Arguments
+- `angle`: The rotation angle in radians.
+"""
 function rotate(angle::Number)
     rotate!(get_state().transform, angle)
 end
 
+"""
+    rotate(x::Number, y::Number, z::Number)
+
+Applies rotations around the X, Y, and Z axes sequentially to the current transformation matrix in the `ContextState`.
+
+# Arguments
+- `x`: The rotation angle around the X-axis in radians.
+- `y`: The rotation angle around the Y-axis in radians.
+- `z`: The rotation angle around the Z-axis in radians.
+"""
 function rotate(x::Number, y::Number, z::Number)
     rotate!(get_state().transform, x, Float32[1, 0, 0])
     rotate!(get_state().transform, y, Float32[0, 1, 0])
     rotate!(get_state().transform, z, Float32[0, 0, 1])
 end
 
+"""
+    lookat(args...)
+
+Sets the view matrix in the current `ContextState` using the `view` function.
+
+# Arguments
+- `args...`: Arguments passed directly to the `view` function (e.g., `position`, `target`, `up`).
+"""
 function lookat(args...)
     get_state().view = view(args...)
 end
 
+"""
+    beginpath()
+
+Clears the current paths and starts a new path in the `ContextState`.
+"""
 function beginpath()
     get_state().paths = [[]]
     get_state().current_path_index = 1
 end
 
+"""
+    moveto(x::Number, y::Number, z::Number = 0.0)
+
+Moves the current drawing position to the specified coordinates, starting a new subpath if the current one is not empty.
+
+# Arguments
+- `x`: The x-coordinate to move to.
+- `y`: The y-coordinate to move to.
+- `z`: The z-coordinate to move to (defaults to 0.0).
+"""
 function moveto(x::Number, y::Number, z::Number = 0.0)
     state = get_state()
     if !isempty(state.paths[state.current_path_index])
@@ -607,10 +1073,25 @@ function moveto(x::Number, y::Number, z::Number = 0.0)
     push!(state.paths[state.current_path_index], (Float32(x), Float32(y), Float32(z)))
 end
 
+"""
+    lineto(x::Number, y::Number, z::Number = 0.0)
+
+Adds a line segment from the current drawing position to the specified coordinates.
+
+# Arguments
+- `x`: The x-coordinate to draw the line to.
+- `y`: The y-coordinate to draw the line to.
+- `z`: The z-coordinate to draw the line to (defaults to 0.0).
+"""
 function lineto(x::Number, y::Number, z::Number = 0.0)
     push!(get_state().paths[get_state().current_path_index], (Float32(x), Float32(y), Float32(z)))
 end
 
+"""
+    closepath()
+
+Closes the current path by adding a line segment from the current point to the starting point of the subpath.
+"""
 function closepath()
     state = get_state()
     current_path = state.paths[state.current_path_index]
@@ -619,6 +1100,14 @@ function closepath()
     end
 end
 
+"""
+    fillcolor(tuple::Tuple{Number, Number, Number})
+
+Sets the fill color for subsequent drawing operations using an RGB tuple. The alpha component is set to 1.
+
+# Arguments
+- `tuple`: A tuple `(r, g, b)` where `r`, `g`, `b` are color components (0-1 or 0-255).
+"""
 function fillcolor(tuple::Tuple{Number, Number, Number})
     get_state().fill_color = (
         Float32(tuple[1]),
@@ -628,6 +1117,14 @@ function fillcolor(tuple::Tuple{Number, Number, Number})
     )
 end
 
+"""
+    fillcolor(tuple::Tuple{Number, Number, Number, Number})
+
+Sets the fill color for subsequent drawing operations using an RGBA tuple.
+
+# Arguments
+- `tuple`: A tuple `(r, g, b, a)` where `r`, `g`, `b`, `a` are color components (0-1 or 0-255).
+"""
 function fillcolor(tuple::Tuple{Number, Number, Number, Number})
     get_state().fill_color = (
         Float32(tuple[1]),
@@ -637,6 +1134,14 @@ function fillcolor(tuple::Tuple{Number, Number, Number, Number})
     )
 end
 
+"""
+    strokecolor(tuple::Tuple{Number, Number, Number})
+
+Sets the stroke color for subsequent drawing operations using an RGB tuple. The alpha component is set to 1.
+
+# Arguments
+- `tuple`: A tuple `(r, g, b)` where `r`, `g`, `b` are color components (0-1 or 0-255).
+"""
 function strokecolor(tuple::Tuple{Number, Number, Number})
     get_state().stroke_color = (
         Float32(tuple[1]),
@@ -646,6 +1151,14 @@ function strokecolor(tuple::Tuple{Number, Number, Number})
     )
 end
 
+"""
+    strokecolor(tuple::Tuple{Number, Number, Number, Number})
+
+Sets the stroke color for subsequent drawing operations using an RGBA tuple.
+
+# Arguments
+- `tuple`: A tuple `(r, g, b, a)` where `r`, `g`, `b`, `a` are color components (0-1 or 0-255).
+"""
 function strokecolor(tuple::Tuple{Number, Number, Number, Number})
     get_state().stroke_color = (
         Float32(tuple[1]),
@@ -655,14 +1168,41 @@ function strokecolor(tuple::Tuple{Number, Number, Number, Number})
     )
 end
 
+"""
+    rgba(r::Int, g::Int, b::Int, a::Int = 255)::Tuple{Float32, Float32, Float32, Float32}
+
+Creates an RGBA color tuple with Float32 components (0.0-1.0) from Int components (0-255).
+
+# Arguments
+- `r`: Red component (0-255).
+- `g`: Green component (0-255).
+- `b`: Blue component (0-255).
+- `a`: Alpha component (0-255, defaults to 255).
+
+# Returns
+A `Tuple{Float32, Float32, Float32, Float32}` representing the RGBA color.
+"""
 function rgba(r::Int, g::Int, b::Int, a::Int = 255)::Tuple{Float32, Float32, Float32, Float32}
     return (r / 255, g / 255, b / 255, a / 255)
 end
 
+"""
+    strokewidth(w::Number)
+
+Sets the stroke width for subsequent drawing operations.
+
+# Arguments
+- `w`: The desired stroke width.
+"""
 function strokewidth(w::Number)
     get_state().stroke_width = w
 end
 
+"""
+    stroke()
+
+Draws the currently defined paths as stroked lines using the current stroke color and width.
+"""
 function stroke()
     immediate_mesh = get_immediate_mesh_3d()
     state::ContextState = get_state()
@@ -698,6 +1238,11 @@ function stroke()
     end
 end
 
+"""
+    fill()
+
+Fills the currently defined paths using the current fill color.
+"""
 function fill()
     immediate_mesh = get_immediate_mesh()
     state::ContextState = get_state()
@@ -729,6 +1274,17 @@ function fill()
     end
 end
 
+"""
+    rect(x::Number, y::Number, w::Number, h::Number)
+
+Defines a rectangular path.
+
+# Arguments
+- `x`: The x-coordinate of the top-left corner of the rectangle.
+- `y`: The y-coordinate of the top-left corner of the rectangle.
+- `w`: The width of the rectangle.
+- `h`: The height of the rectangle.
+"""
 function rect(x::Number, y::Number, w::Number, h::Number)
     beginpath()
     moveto(x, y)
@@ -738,6 +1294,17 @@ function rect(x::Number, y::Number, w::Number, h::Number)
     closepath()
 end
 
+"""
+    circle(r::Number, x::Number = 0, y::Number = 0, segments::Int = 32)
+
+Defines a circular path.
+
+# Arguments
+- `r`: The radius of the circle.
+- `x`: The x-coordinate of the center of the circle (defaults to 0).
+- `y`: The y-coordinate of the center of the circle (defaults to 0).
+- `segments`: The number of line segments used to approximate the circle (defaults to 32).
+"""
 function circle(r::Number, x::Number = 0, y::Number = 0, segments::Int = 32)
     for i in 0:segments
         angle::Float32 = 2.0f0 * pi * (i - 1) / segments
@@ -752,10 +1319,32 @@ function circle(r::Number, x::Number = 0, y::Number = 0, segments::Int = 32)
     end
 end
 
+"""
+    fillrect(x::Number, y::Number, w::Number, h::Number)
+
+Draws a filled rectangle using the current fill color.
+
+# Arguments
+- `x`: The x-coordinate of the top-left corner of the rectangle.
+- `y`: The y-coordinate of the top-left corner of the rectangle.
+- `w`: The width of the rectangle.
+- `h`: The height of the rectangle.
+"""
 function fillrect(x::Number, y::Number, w::Number, h::Number)
     drawimage(x, y, w, h, get_context().blank_texture)
 end
 
+"""
+    fillcircle(radius::Number, x::Number = 0, y::Number = 0, segments::Int = 32)
+
+Draws a filled circle using the current fill color.
+
+# Arguments
+- `radius`: The radius of the circle.
+- `x`: The x-coordinate of the center of the circle (defaults to 0).
+- `y`: The y-coordinate of the center of the circle (defaults to 0).
+- `segments`: The number of line segments used to approximate the circle (defaults to 32).
+"""
 function fillcircle(radius::Number, x::Number = 0, y::Number = 0, segments::Int = 32)
     # Create triangles by connecting center to each pair of consecutive vertices
     # This creates a fan-like triangulation
@@ -784,6 +1373,22 @@ function fillcircle(radius::Number, x::Number = 0, y::Number = 0, segments::Int 
     draw_mesh(immediate_mesh, get_context().blank_texture, [state.fill_color...])
 end
 
+"""
+    drawimage(x::Number,
+              y::Number,
+              w::Number,
+              h::Number,
+              texture_id::GLuint)
+
+Draws a textured rectangle.
+
+# Arguments
+- `x`: The x-coordinate of the top-left corner of the rectangle.
+- `y`: The y-coordinate of the top-left corner of the rectangle.
+- `w`: The width of the rectangle.
+- `h`: The height of the rectangle.
+- `texture_id`: The OpenGL ID of the texture to draw.
+"""
 function drawimage(x::Number,
                    y::Number,
                    w::Number,
@@ -802,6 +1407,14 @@ function drawimage(x::Number,
 end
 
 # Draw text using the loaded font atlas (simplified)
+"""
+    text(text::String)
+
+Draws a string of text using the loaded font atlas.
+
+# Arguments
+- `text`: The string to draw.
+"""
 function text(text::String)
     ctx::RenderContext = get_context()
     vertices = GLfloat[]
@@ -859,6 +1472,14 @@ function text(text::String)
     end
 end
 
+"""
+    get_immediate_mesh()
+
+Retrieves or creates the global 2D immediate mode mesh for drawing.
+
+# Returns
+The `Mesh` object for 2D immediate mode drawing.
+"""
 function get_immediate_mesh()
     global immediate_mesh
     if immediate_mesh == nothing || immediate_mesh.vao == 0
@@ -868,6 +1489,14 @@ function get_immediate_mesh()
     return immediate_mesh
 end
 
+"""
+    get_immediate_mesh_3d()
+
+Retrieves or creates the global 3D immediate mode mesh for drawing.
+
+# Returns
+The `Mesh` object for 3D immediate mode drawing.
+"""
 function get_immediate_mesh_3d()
     global immediate_mesh_3d
     if immediate_mesh_3d == nothing || immediate_mesh_3d.vao == 0
@@ -881,19 +1510,52 @@ include("./meshes.jl")
 
 const window = Ref{GLFW.Window}()
 
+"""
+    set_render_context(ctx::RenderContext)
+
+Sets the global `RenderContext`.
+
+# Arguments
+- `ctx`: The `RenderContext` to set as global.
+"""
 function set_render_context(ctx::RenderContext)
     render_context[] = ctx
 end
 
+"""
+    initialize_render_context()
+
+Initializes the global `RenderContext`.
+"""
 function initialize_render_context()
     set_render_context(RenderContext())
 end
 
+"""
+    clear()
+
+Clears the color, depth, and stencil buffers of the current OpenGL context.
+"""
 function clear()
     glClearColor(0.0f0, 0.0f0, 0.0f0, 0.0f0)
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT)
 end
 
+"""
+    initialize(;window_width::Int = 800, window_height::Int = 600)
+
+Initializes GLFW and OpenGL, creates a window, and sets up the rendering context.
+
+# Arguments
+- `window_width`: The desired width of the window (defaults to 800).
+- `window_height`: The desired height of the window (defaults to 600).
+
+# Returns
+The GLFW window object.
+
+# Throws
+- `error`: If GLFW initialization or window creation fails.
+"""
 function initialize(;window_width::Int = 800, window_height::Int = 600)
     # --- Initialization ---
     if !GLFW.Init()
@@ -965,6 +1627,15 @@ function initialize(;window_width::Int = 800, window_height::Int = 600)
     return window[]
 end
 
+"""
+    start_render_loop(render::Function; wait_for_events::Bool = false)
+
+Starts the main render loop, continuously calling the `render` function until the window is closed.
+
+# Arguments
+- `render`: A function that contains the drawing logic for each frame.
+- `wait_for_events`: If `true`, the loop will wait for events, otherwise it will poll for events (defaults to `false`).
+"""
 function start_render_loop(render::Function; wait_for_events::Bool = false)
     frame_count::Int64 = 0
     while !GLFW.WindowShouldClose(window[])
@@ -991,6 +1662,11 @@ function start_render_loop(render::Function; wait_for_events::Bool = false)
     terminate()
 end
 
+"""
+    test_scene_2d()
+
+Runs a 2D test scene demonstrating various drawing functionalities like rectangles, circles, textures, and text.
+"""
 function test_scene_2d()
     initialize()
 
@@ -1166,6 +1842,11 @@ function test_scene_2d()
     end)
 end
 
+"""
+    test_scene_3d()
+
+Runs a 3D test scene demonstrating various 3D drawing functionalities and camera controls.
+"""
 function test_scene_3d()
     initialize()
 
