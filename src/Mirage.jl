@@ -1594,7 +1594,7 @@ function initialize(;window_width::Int = 800, window_height::Int = 600)
     GLFW.WindowHint(GLFW.SAMPLES, 4)
 
     # Create a windowed mode window and its OpenGL context
-    window[] = GLFW.CreateWindow(window_width, window_height, "Julia OpenGL Shapes & Text Demo")
+    window[] = GLFW.CreateWindow(window_width, window_height, "Mirage")
     if window == C_NULL
         GLFW.Terminate()
         error("Failed to create GLFW window")
