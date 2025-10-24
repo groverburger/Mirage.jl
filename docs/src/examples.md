@@ -9,65 +9,65 @@ Mirage.jl provides a stateful 2D drawing API similar to the HTML5 Canvas. You ca
 This example demonstrates basic shape drawing, transformations, and text rendering.
 
 ```julia
-using Mirage
+import Mirage
 
 function main()
-    initialize(window_width=1280, window_height=720)
-
+    Mirage.initialize(window_width=1280, window_height=720)
+    
     # Load a texture for the sprite
     # Replace with a path to your own image
-    test_texture = load_texture("test_texture.png")
-
+    test_texture = Mirage.load_texture("test_texture.png")
+    
     angle = 0.0
-
+    
     function render()
-        clear() # Clear the screen
-        update_ortho_projection_matrix() # Use a 2D orthographic camera
-
+        Mirage.clear() # Clear the screen
+        Mirage.update_ortho_projection_matrix() # Use a 2D orthographic camera
+        
         # --- Draw a rotating, textured sprite ---
-        save() # Save the current state (default transform)
-        fillcolor(rgba(255, 255, 255)) # White tint
+        Mirage.save() # Save the current state (default transform)
+        Mirage.fillcolor(Mirage.rgba(255, 255, 255)) # White tint
         
         # Move to the center of the screen
-        translate(640, 360)
+        Mirage.translate(640, 360)
         # Rotate over time
-        rotate(angle)
+        Mirage.rotate(angle)
         # Scale up
-        scale(4.0)
+        Mirage.scale(4.0)
         # Draw the image centered at the new origin
-        drawimage(-50, -50, 100, 100, test_texture)
+        Mirage.drawimage(-50, -50, 100, 100, test_texture)
         
-        restore() # Restore to the default state
-
+        Mirage.restore() # Restore to the default state
+        
         # --- Draw a path with stroke and fill ---
-        save()
-        beginpath()
-        strokewidth(5)
-        strokecolor(rgba(255, 255, 0, 255)) # Yellow stroke
-        moveto(400, 400)
-        lineto(500, 400)
-        lineto(500, 500)
-        lineto(400, 500)
-        closepath() # Connects the last point to the first
+        Mirage.save()
+        Mirage.beginpath()
+        Mirage.strokewidth(5)
+        Mirage.strokecolor(Mirage.rgba(255, 255, 0, 255)) # Yellow stroke
+        Mirage.moveto(400, 400)
+        Mirage.lineto(500, 400)
+        Mirage.lineto(500, 500)
+        Mirage.lineto(400, 500)
+        Mirage.closepath() # Connects the last point to the first
         
-        fillcolor(rgba(0, 0, 255, 100)) # Semi-transparent blue fill
-        fill()    # Fill the path
-        stroke()  # Stroke the path
-        restore()
-
+        Mirage.fillcolor(Mirage.rgba(0, 0, 255, 100)) # Semi-transparent blue fill
+        Mirage.fill()    # Fill the path
+        Mirage.stroke()  # Stroke the path
+        Mirage.restore()
+        
         # --- Draw Text ---
-        save()
-        translate(50, 650)
-        scale(2)
-        fillcolor(rgba(20, 200, 255, 255)) # Cyan color
-        text("Mirage.jl 2D Demo")
-        restore()
-
+        Mirage.save()
+        Mirage.translate(50, 650)
+        Mirage.scale(2)
+        Mirage.fillcolor(Mirage.rgba(20, 200, 255, 255)) # Cyan color
+        Mirage.text("Mirage.jl 2D Demo")
+        Mirage.restore()
+        
         # Update animation variable
         angle += 0.01
     end
-
-    start_render_loop(render)
+    
+    Mirage.start_render_loop(render)
 end
 
 main()
@@ -80,47 +80,47 @@ For 3D, you switch to a perspective camera and work with `Mesh` objects. A `Mesh
 This example shows a camera rotating around a 3D cube.
 
 ```julia
-using Mirage
+import Mirage
 
 function main()
-    initialize()
-
+    Mirage.initialize()
+    
     # Create a 3D cube mesh with a side length of 10 units
-    cube_mesh = create_cube(10.0)
+    cube_mesh = Mirage.create_cube(10.0)
     
     # Enable the depth test for correct 3D rendering
     glEnable(GL_DEPTH_TEST)
-
+    
     frame = 0
-
+    
     function render()
-        clear()
+        Mirage.clear()
         
         # Use a perspective camera for 3D
-        update_perspective_projection_matrix()
-
+        Mirage.update_perspective_projection_matrix()
+        
         # Set up the camera position and orientation.
         # The camera will circle around the origin (0,0,0).
         camera_x = cos(frame / 100) * 30
         camera_y = sin(frame / 100) * 30
-        lookat(
+        Mirage.lookat(
             Float32[camera_x, camera_y, 20], # Camera position
             Float32[0, 0, 0],                 # Target to look at
             Float32[0, 0, 1]                  # Up direction (Z-up)
         )
-
+        
         # --- Draw the cube ---
-        save()
+        Mirage.save()
         # Apply a rotation to the cube itself
-        rotate(frame / 50, frame / 30, frame / 20)
-        fillcolor(rgba(0, 150, 255)) # Blue tint
-        draw_mesh(cube_mesh)
-        restore()
-
+        Mirage.rotate(frame / 50, frame / 30, frame / 20)
+        Mirage.fillcolor(Mirage.rgba(0, 150, 255)) # Blue tint
+        Mirage.draw_mesh(cube_mesh)
+        Mirage.restore()
+        
         frame += 1
     end
-
-    start_render_loop(render)
+    
+    Mirage.start_render_loop(render)
 end
 
 main()
@@ -131,39 +131,38 @@ main()
 Mirage can load 3D models from Wavefront `.obj` files using the `load_obj_mesh` function. The model must be in the same directory as your script or you must provide a correct relative path.
 
 ```julia
-using Mirage
+import Mirage
 
 function main()
-    initialize()
-
+    Mirage.initialize()
+    
     # Load the mesh from an OBJ file
     # This requires a 'cube.obj' file in the same directory
     try
-        obj_mesh = load_obj_mesh("cube.obj")
+        obj_mesh = Mirage.load_obj_mesh("cube.obj")
         
         glEnable(GL_DEPTH_TEST)
         frame = 0
-
+        
         function render()
-            clear()
-            update_perspective_projection_matrix()
-
+            Mirage.clear()
+            Mirage.update_perspective_projection_matrix()
+            
             # Position the camera
-            lookat(Float32[30, 30, 30], Float32[0, 0, 0], Float32[0, 0, 1])
-
+            Mirage.lookat(Float32[30, 30, 30], Float32[0, 0, 0], Float32[0, 0, 1])
+            
             # Draw the loaded mesh
-            save()
-            rotate(0.0, 0.0, frame / 100) # Rotate around Z-axis
-            scale(5.0) # Make it 5 times bigger
-            fillcolor(rgba(255, 255, 255))
-            draw_mesh(obj_mesh)
-            restore()
-
+            Mirage.save()
+            Mirage.rotate(0.0, 0.0, frame / 100) # Rotate around Z-axis
+            Mirage.scale(5.0) # Make it 5 times bigger
+            Mirage.fillcolor(Mirage.rgba(255, 255, 255))
+            Mirage.draw_mesh(obj_mesh)
+            Mirage.restore()
+            
             frame += 1
         end
-
-        start_render_loop(render)
-
+        
+        Mirage.start_render_loop(render)
     catch e
         @error "Could not load 'cube.obj'. Make sure the file exists." e
     end

@@ -30,21 +30,21 @@ function main()
     # 1. Initialize the window and rendering context.
     # This creates an 800x600 window by default.
     Mirage.initialize()
-
+    
     # 2. Define the function that will be called for every frame.
     function render()
         # Clear the screen to a black color.
         Mirage.clear()
-
+        
         # Set the drawing color to red.
         # `rgba` is a helper to create a color from Red, Green, Blue, and Alpha values (0-255).
         Mirage.fillcolor(Mirage.rgba(255, 0, 0))
-
+        
         # Draw a filled rectangle.
         # The arguments are x, y, width, height.
         Mirage.fillrect(100, 100, 200, 150)
     end
-
+    
     # 3. Start the render loop, passing our `render` function.
     # This will run until the user closes the window.
     start_render_loop(render)
