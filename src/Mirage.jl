@@ -750,8 +750,13 @@ function create_canvas(width::Int, height::Int)
 end
 
 """
+    set_canvas(canvas::Canvas)
+
 Sets the render target to the specified canvas. All subsequent drawing
 commands will render to this canvas.
+
+# Arguments
+- `canvas`: The `Canvas` object to set as the current render target.
 """
 function set_canvas(canvas::Canvas)
     glBindFramebuffer(GL_FRAMEBUFFER, canvas.fbo)
@@ -760,7 +765,10 @@ function set_canvas(canvas::Canvas)
 end
 
 """
-Resets the render target to the main window.
+    set_canvas()
+
+Resets the render target to the main window. All subsequent drawing
+commands will render to the main window.
 """
 function set_canvas()
     ctx = get_context()
@@ -770,10 +778,20 @@ function set_canvas()
 end
 
 """
+    resize!(canvas::Canvas, width::Int, height::Int)
+
 Resizes the canvas and its underlying texture and renderbuffer objects.
 
 This is useful if the canvas needs to match a new window size or if a
 different resolution is required for rendering effects.
+
+# Arguments
+- `canvas`: The `Canvas` object to resize.
+- `width`: The new width of the canvas in pixels.
+- `height`: The new height of the canvas in pixels.
+
+# Returns
+The modified `Canvas` object.
 """
 function resize!(canvas::Canvas, width::Int, height::Int)
     # Ensure dimensions are valid before proceeding
@@ -800,11 +818,16 @@ function resize!(canvas::Canvas, width::Int, height::Int)
 end
 
 """
+    destroy!(canvas::Canvas)
+
 Frees the GPU resources associated with a Canvas.
 
 This includes the framebuffer object (FBO), the color texture, and the
 depth/stencil renderbuffer. It is essential to call this function when the
 canvas is no longer needed to prevent memory leaks on the GPU.
+
+# Arguments
+- `canvas`: The `Canvas` object to destroy.
 """
 function destroy!(canvas::Canvas)
     # Ensure we don't try to delete already-deleted objects
