@@ -47,7 +47,7 @@ function main()
     
     # 3. Start the render loop, passing our `render` function.
     # This will run until the user closes the window.
-    start_render_loop(render)
+    Mirage.start_render_loop(render)
 end
 
 # Run the main function

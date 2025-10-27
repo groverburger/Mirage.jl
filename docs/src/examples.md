@@ -88,9 +88,6 @@ function main()
     # Create a 3D cube mesh with a side length of 10 units
     cube_mesh = Mirage.create_cube(10.0)
     
-    # Enable the depth test for correct 3D rendering
-    glEnable(GL_DEPTH_TEST)
-    
     frame = 0
     
     function render()
