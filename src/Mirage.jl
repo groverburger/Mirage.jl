@@ -879,6 +879,8 @@ function clone(x::ContextState)
     return ContextState(; kwargs...)
 end
 
+include("./default_font.jl")
+
 mutable struct RenderContext
     shader::ShaderInfo
     blank_texture::GLuint
@@ -913,7 +915,8 @@ A new `RenderContext` instance.
         initialize_shader_uniform!(shader, "color")
 
         blank_texture = gl_gen_texture()
-        font_texture = load_texture("./ascii_font_atlas.png")
+        #font_texture = load_texture("./ascii_font_atlas.png")
+        font_texture = load_texture(map(x -> x == 1 ? RGBA(1, 1, 1, 1) : RGBA(0, 0, 0, 0), default_font))
 
         # --- Font Setup  ---
         glBindTexture(GL_TEXTURE_2D, blank_texture)
