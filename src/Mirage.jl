@@ -1260,34 +1260,121 @@ Draws the currently defined paths as stroked lines using the current stroke colo
 function stroke()
     immediate_mesh = get_immediate_mesh_3d()
     state::ContextState = get_state()
-    vertices::Vector{Float32} = Float32[]
+    all_vertices::Vector{Float32} = Float32[]
+    half_stroke = state.stroke_width / 2.0
 
     for path in state.paths
         if length(path) < 2
             continue
         end
 
-        for i in 1:(length(path) - 1)
-            (x1, y1, z1) = path[i]
-            (x2, y2, z2) = path[i + 1]
+        left_vertices = []
+        right_vertices = []
 
-            angle::Float64 = atan(y2 - y1, x2 - x1)
-            dx::Float32 = cos(angle + pi / 2) * state.stroke_width / 2
-            dy::Float32 = sin(angle + pi / 2) * state.stroke_width / 2
+        # Process first point
+        p1 = path[1]
+        p2 = path[2]
+        dir_x = p2[1] - p1[1]
+        dir_y = p2[2] - p1[2]
+        len = sqrt(dir_x^2 + dir_y^2)
+        dir_x /= len
+        dir_y /= len
+        normal_x = -dir_y
+        normal_y = dir_x
+        
+        push!(left_vertices, (p1[1] - normal_x * half_stroke, p1[2] - normal_y * half_stroke, p1[3]))
+        push!(right_vertices, (p1[1] + normal_x * half_stroke, p1[2] + normal_y * half_stroke, p1[3]))
 
-            append!(vertices, Float32[
-                x1 + dx, y1 + dy, z1, 0.0, 0.0,
-                x1 - dx, y1 - dy, z1, 0.0, 1.0,
-                x2 + dx, y2 + dy, z2, 1.0, 1.0,
-                x1 - dx, y1 - dy, z1, 0.0, 1.0,
-                x2 - dx, y2 - dy, z2, 1.0, 0.0,
-                x2 + dx, y2 + dy, z2, 1.0, 1.0,
-            ])
+        # Process intermediate points
+        for i in 2:(length(path) - 1)
+            p_prev = path[i-1]
+            p_curr = path[i]
+            p_next = path[i+1]
+
+            # Vector from previous to current
+            v1_x = p_curr[1] - p_prev[1]
+            v1_y = p_curr[2] - p_prev[2]
+            len1 = sqrt(v1_x^2 + v1_y^2)
+            v1_x /= len1
+            v1_y /= len1
+            n1_x = -v1_y
+            n1_y = v1_x
+
+            # Vector from current to next
+            v2_x = p_next[1] - p_curr[1]
+            v2_y = p_next[2] - p_curr[2]
+            len2 = sqrt(v2_x^2 + v2_y^2)
+            v2_x /= len2
+            v2_y /= len2
+            n2_x = -v2_y
+            n2_y = v2_x
+
+            # Miter vector
+            miter_x = n1_x + n2_x
+            miter_y = n1_y + n2_y
+            miter_len_sq = miter_x^2 + miter_y^2
+            
+            if miter_len_sq > 1e-6
+                miter_len = sqrt(miter_len_sq)
+                miter_x /= miter_len
+                miter_y /= miter_len
+
+                dot_product = n1_x * n2_x + n1_y * n2_y
+                miter_scale = 1.0 / sqrt((1.0 + dot_product) / 2.0)
+
+
+                # Cap miter length
+                if miter_scale > 4.0
+                    miter_scale = 4.0
+                end
+
+                miter_dx = miter_x * miter_scale * half_stroke
+                miter_dy = miter_y * miter_scale * half_stroke
+
+                push!(left_vertices, (p_curr[1] - miter_dx, p_curr[2] - miter_dy, p_curr[3]))
+                push!(right_vertices, (p_curr[1] + miter_dx, p_curr[2] + miter_dy, p_curr[3]))
+            else
+                # Fallback for parallel lines
+                push!(left_vertices, (p_curr[1] - n1_x * half_stroke, p_curr[2] - n1_y * half_stroke, p_curr[3]))
+                push!(right_vertices, (p_curr[1] + n1_x * half_stroke, p_curr[2] + n1_y * half_stroke, p_curr[3]))
+            end
+        end
+
+        # Process last point
+        p_last = path[end]
+        p_before_last = path[end-1]
+        dir_x = p_last[1] - p_before_last[1]
+        dir_y = p_last[2] - p_before_last[2]
+        len = sqrt(dir_x^2 + dir_y^2)
+        dir_x /= len
+        dir_y /= len
+        normal_x = -dir_y
+        normal_y = dir_x
+
+        push!(left_vertices, (p_last[1] - normal_x * half_stroke, p_last[2] - normal_y * half_stroke, p_last[3]))
+        push!(right_vertices, (p_last[1] + normal_x * half_stroke, p_last[2] + normal_y * half_stroke, p_last[3]))
+
+        # Create triangles
+        for i in 1:(length(left_vertices) - 1)
+            l1 = left_vertices[i]
+            r1 = right_vertices[i]
+            l2 = left_vertices[i+1]
+            r2 = right_vertices[i+1]
+
+            # Triangle 1
+            append!(all_vertices, [l1[1], l1[2], l1[3], 0.0, 0.0])
+            append!(all_vertices, [r1[1], r1[2], r1[3], 1.0, 0.0])
+            append!(all_vertices, [l2[1], l2[2], l2[3], 0.0, 1.0])
+
+            # Triangle 2
+            append!(all_vertices, [l2[1], l2[2], l2[3], 0.0, 1.0])
+            append!(all_vertices, [r1[1], r1[2], r1[3], 1.0, 0.0])
+            append!(all_vertices, [r2[1], r2[2], r2[3], 1.0, 1.0])
         end
     end
 
-    if !isempty(vertices)
-        update_mesh_vertices!(immediate_mesh, vertices)
+    if !isempty(all_vertices)
+        update_mesh_vertices!(immediate_mesh, all_vertices)
         draw_mesh(immediate_mesh, get_context().blank_texture, [state.stroke_color...])
     end
 end
@@ -1360,7 +1447,7 @@ Defines a circular path.
 - `segments`: The number of line segments used to approximate the circle (defaults to 32).
 """
 function circle(r::Number, x::Number = 0, y::Number = 0, segments::Int = 32)
-    for i in 0:segments
+    for i in 1:segments
         angle::Float32 = 2.0f0 * pi * (i - 1) / segments
         next_angle::Float32 = 2.0f0 * pi * i / segments
         x::Float32 = r * cos(angle)
@@ -1371,6 +1458,7 @@ function circle(r::Number, x::Number = 0, y::Number = 0, segments::Int = 32)
             lineto(x, y)
         end
     end
+    closepath()
 end
 
 """
@@ -1864,8 +1952,16 @@ function test_scene_2d()
         lineto(350, 500)
         moveto(500, 200)
         lineto(500, 300)
-        strokewidth(2)
+        strokewidth(14)
         strokecolor(rgba(64, 128, 255, 255))
+        stroke()
+        restore()
+
+        save()
+        strokewidth(14)
+        strokecolor(rgba(64, 128, 255, 255))
+        translate(200, 100)
+        circle(100)
         stroke()
         restore()
 
