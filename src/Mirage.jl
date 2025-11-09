@@ -1268,105 +1268,112 @@ function stroke()
             continue
         end
 
+        is_closed = path[1] == path[end]
+        
         left_vertices = []
         right_vertices = []
 
-        # Process first point
-        p1 = path[1]
-        p2 = path[2]
-        dir_x = p2[1] - p1[1]
-        dir_y = p2[2] - p1[2]
-        len = sqrt(dir_x^2 + dir_y^2)
-        dir_x /= len
-        dir_y /= len
-        normal_x = -dir_y
-        normal_y = dir_x
-        
-        push!(left_vertices, (p1[1] - normal_x * half_stroke, p1[2] - normal_y * half_stroke, p1[3]))
-        push!(right_vertices, (p1[1] + normal_x * half_stroke, p1[2] + normal_y * half_stroke, p1[3]))
+        if is_closed
+            num_points = length(path)
+            # Path is closed, so we loop through all points and compute miters
+            for i in 1:(num_points - 1) # num_points-1 because the last point is a duplicate
+                p_prev = (i == 1) ? path[num_points-1] : path[i-1]
+                p_curr = path[i]
+                p_next = path[i+1]
 
-        # Process intermediate points
-        for i in 2:(length(path) - 1)
-            p_prev = path[i-1]
-            p_curr = path[i]
-            p_next = path[i+1]
+                v1_x, v1_y = p_curr[1] - p_prev[1], p_curr[2] - p_prev[2]
+                v2_x, v2_y = p_next[1] - p_curr[1], p_next[2] - p_curr[2]
 
-            # Vector from previous to current
-            v1_x = p_curr[1] - p_prev[1]
-            v1_y = p_curr[2] - p_prev[2]
-            len1 = sqrt(v1_x^2 + v1_y^2)
-            v1_x /= len1
-            v1_y /= len1
-            n1_x = -v1_y
-            n1_y = v1_x
+                len1 = sqrt(v1_x^2 + v1_y^2); v1_x /= len1; v1_y /= len1
+                len2 = sqrt(v2_x^2 + v2_y^2); v2_x /= len2; v2_y /= len2
 
-            # Vector from current to next
-            v2_x = p_next[1] - p_curr[1]
-            v2_y = p_next[2] - p_curr[2]
-            len2 = sqrt(v2_x^2 + v2_y^2)
-            v2_x /= len2
-            v2_y /= len2
-            n2_x = -v2_y
-            n2_y = v2_x
+                n1_x, n1_y = -v1_y, v1_x
+                n2_x, n2_y = -v2_y, v2_x
 
-            # Miter vector
-            miter_x = n1_x + n2_x
-            miter_y = n1_y + n2_y
-            miter_len_sq = miter_x^2 + miter_y^2
-            
-            if miter_len_sq > 1e-6
-                miter_len = sqrt(miter_len_sq)
-                miter_x /= miter_len
-                miter_y /= miter_len
+                miter_x, miter_y = n1_x + n2_x, n1_y + n2_y
+                miter_len_sq = miter_x^2 + miter_y^2
 
-                dot_product = n1_x * n2_x + n1_y * n2_y
-                miter_scale = 1.0 / sqrt((1.0 + dot_product) / 2.0)
+                if miter_len_sq > 1e-6
+                    miter_len = sqrt(miter_len_sq)
+                    miter_x /= miter_len
+                    miter_y /= miter_len
 
+                    dot_product = n1_x * n2_x + n1_y * n2_y
+                    miter_scale = 1.0 / sqrt(max(0.001, (1.0 + dot_product) / 2.0))
 
-                # Cap miter length
-                if miter_scale > 4.0
-                    miter_scale = 4.0
+                    if miter_scale > 4.0; miter_scale = 4.0; end
+
+                    miter_dx = miter_x * miter_scale * half_stroke
+                    miter_dy = miter_y * miter_scale * half_stroke
+
+                    push!(left_vertices, (p_curr[1] - miter_dx, p_curr[2] - miter_dy, p_curr[3]))
+                    push!(right_vertices, (p_curr[1] + miter_dx, p_curr[2] + miter_dy, p_curr[3]))
+                else
+                    push!(left_vertices, (p_curr[1] - n1_x * half_stroke, p_curr[2] - n1_y * half_stroke, p_curr[3]))
+                    push!(right_vertices, (p_curr[1] + n1_x * half_stroke, p_curr[2] + n1_y * half_stroke, p_curr[3]))
                 end
-
-                miter_dx = miter_x * miter_scale * half_stroke
-                miter_dy = miter_y * miter_scale * half_stroke
-
-                push!(left_vertices, (p_curr[1] - miter_dx, p_curr[2] - miter_dy, p_curr[3]))
-                push!(right_vertices, (p_curr[1] + miter_dx, p_curr[2] + miter_dy, p_curr[3]))
-            else
-                # Fallback for parallel lines
-                push!(left_vertices, (p_curr[1] - n1_x * half_stroke, p_curr[2] - n1_y * half_stroke, p_curr[3]))
-                push!(right_vertices, (p_curr[1] + n1_x * half_stroke, p_curr[2] + n1_y * half_stroke, p_curr[3]))
             end
+            # Add the first vertex again to close the loop
+            push!(left_vertices, left_vertices[1])
+            push!(right_vertices, right_vertices[1])
+
+        else # Open path
+            # Process first point
+            p1 = path[1]; p2 = path[2]
+            dir_x = p2[1] - p1[1]; dir_y = p2[2] - p1[2]
+            len = sqrt(dir_x^2 + dir_y^2); dir_x /= len; dir_y /= len
+            normal_x = -dir_y; normal_y = dir_x
+            push!(left_vertices, (p1[1] - normal_x * half_stroke, p1[2] - normal_y * half_stroke, p1[3]))
+            push!(right_vertices, (p1[1] + normal_x * half_stroke, p1[2] + normal_y * half_stroke, p1[3]))
+
+            # Process intermediate points
+            for i in 2:(length(path) - 1)
+                p_prev = path[i-1]; p_curr = path[i]; p_next = path[i+1]
+                v1_x = p_curr[1] - p_prev[1]; v1_y = p_curr[2] - p_prev[2]
+                len1 = sqrt(v1_x^2 + v1_y^2); v1_x /= len1; v1_y /= len1
+                n1_x = -v1_y; n1_y = v1_x
+
+                v2_x = p_next[1] - p_curr[1]; v2_y = p_next[2] - p_curr[2]
+                len2 = sqrt(v2_x^2 + v2_y^2); v2_x /= len2; v2_y /= len2
+                n2_x = -v2_y; n2_y = v2_x
+
+                miter_x = n1_x + n2_x; miter_y = n1_y + n2_y
+                miter_len_sq = miter_x^2 + miter_y^2
+                
+                if miter_len_sq > 1e-6
+                    miter_len = sqrt(miter_len_sq)
+                    miter_x /= miter_len; miter_y /= miter_len
+                    dot_product = n1_x * n2_x + n1_y * n2_y
+                    miter_scale = 1.0 / sqrt(max(0.001, (1.0 + dot_product) / 2.0))
+                    if miter_scale > 4.0; miter_scale = 4.0; end
+                    miter_dx = miter_x * miter_scale * half_stroke
+                    miter_dy = miter_y * miter_scale * half_stroke
+                    push!(left_vertices, (p_curr[1] - miter_dx, p_curr[2] - miter_dy, p_curr[3]))
+                    push!(right_vertices, (p_curr[1] + miter_dx, p_curr[2] + miter_dy, p_curr[3]))
+                else
+                    push!(left_vertices, (p_curr[1] - n1_x * half_stroke, p_curr[2] - n1_y * half_stroke, p_curr[3]))
+                    push!(right_vertices, (p_curr[1] + n1_x * half_stroke, p_curr[2] + n1_y * half_stroke, p_curr[3]))
+                end
+            end
+
+            # Process last point
+            p_last = path[end]; p_before_last = path[end-1]
+            dir_x = p_last[1] - p_before_last[1]; dir_y = p_last[2] - p_before_last[2]
+            len = sqrt(dir_x^2 + dir_y^2); dir_x /= len; dir_y /= len
+            normal_x = -dir_y; normal_y = dir_x
+            push!(left_vertices, (p_last[1] - normal_x * half_stroke, p_last[2] - normal_y * half_stroke, p_last[3]))
+            push!(right_vertices, (p_last[1] + normal_x * half_stroke, p_last[2] + normal_y * half_stroke, p_last[3]))
         end
 
-        # Process last point
-        p_last = path[end]
-        p_before_last = path[end-1]
-        dir_x = p_last[1] - p_before_last[1]
-        dir_y = p_last[2] - p_before_last[2]
-        len = sqrt(dir_x^2 + dir_y^2)
-        dir_x /= len
-        dir_y /= len
-        normal_x = -dir_y
-        normal_y = dir_x
-
-        push!(left_vertices, (p_last[1] - normal_x * half_stroke, p_last[2] - normal_y * half_stroke, p_last[3]))
-        push!(right_vertices, (p_last[1] + normal_x * half_stroke, p_last[2] + normal_y * half_stroke, p_last[3]))
-
-        # Create triangles
+        # Create triangles for both open and closed paths
         for i in 1:(length(left_vertices) - 1)
-            l1 = left_vertices[i]
-            r1 = right_vertices[i]
-            l2 = left_vertices[i+1]
-            r2 = right_vertices[i+1]
+            l1 = left_vertices[i]; r1 = right_vertices[i]
+            l2 = left_vertices[i+1]; r2 = right_vertices[i+1]
 
-            # Triangle 1
             append!(all_vertices, [l1[1], l1[2], l1[3], 0.0, 0.0])
             append!(all_vertices, [r1[1], r1[2], r1[3], 1.0, 0.0])
             append!(all_vertices, [l2[1], l2[2], l2[3], 0.0, 1.0])
 
-            # Triangle 2
             append!(all_vertices, [l2[1], l2[2], l2[3], 0.0, 1.0])
             append!(all_vertices, [r1[1], r1[2], r1[3], 1.0, 0.0])
             append!(all_vertices, [r2[1], r2[2], r2[3], 1.0, 1.0])
@@ -2164,9 +2171,12 @@ function test_scene_3d()
         save()
         strokecolor(rgba(255, 0, 0, 255))
         beginpath()
+        #=
         moveto(100, 100)
         lineto(0, 0)
         lineto(-100, 0, -50)
+        =#
+        circle(20)
         stroke()
         restore()
 
