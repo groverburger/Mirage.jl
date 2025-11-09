@@ -1883,6 +1883,114 @@ function test_scene_3d()
     sphere_mesh = create_uv_sphere(4.0f0)
     obj_mesh = load_obj_mesh("cube.obj")
 
+    s = 10.0f0 / 2
+    cube_vertices_with_normals = Float32[
+        # positions      # normals
+        -s, -s, -s,  0,  0, -1,
+         s, -s, -s,  0,  0, -1,
+         s,  s, -s,  0,  0, -1,
+         s,  s, -s,  0,  0, -1,
+        -s,  s, -s,  0,  0, -1,
+        -s, -s, -s,  0,  0, -1,
+
+        -s, -s,  s,  0,  0,  1,
+         s, -s,  s,  0,  0,  1,
+         s,  s,  s,  0,  0,  1,
+         s,  s,  s,  0,  0,  1,
+        -s,  s,  s,  0,  0,  1,
+        -s, -s,  s,  0,  0,  1,
+
+        -s,  s,  s, -1,  0,  0,
+        -s,  s, -s, -1,  0,  0,
+        -s, -s, -s, -1,  0,  0,
+        -s, -s, -s, -1,  0,  0,
+        -s, -s,  s, -1,  0,  0,
+        -s,  s,  s, -1,  0,  0,
+
+         s,  s,  s,  1,  0,  0,
+         s,  s, -s,  1,  0,  0,
+         s, -s, -s,  1,  0,  0,
+         s, -s, -s,  1,  0,  0,
+         s, -s,  s,  1,  0,  0,
+         s,  s,  s,  1,  0,  0,
+
+        -s, -s, -s,  0, -1,  0,
+         s, -s, -s,  0, -1,  0,
+         s, -s,  s,  0, -1,  0,
+         s, -s,  s,  0, -1,  0,
+        -s, -s,  s,  0, -1,  0,
+        -s, -s, -s,  0, -1,  0,
+
+        -s,  s, -s,  0,  1,  0,
+         s,  s, -s,  0,  1,  0,
+         s,  s,  s,  0,  1,  0,
+         s,  s,  s,  0,  1,  0,
+        -s,  s,  s,  0,  1,  0,
+        -s,  s, -s,  0,  1,  0
+    ]
+    phong_cube_attributes = [
+        VertexAttribute(0, 3, GL_FLOAT, false, 0),
+        VertexAttribute(1, 3, GL_FLOAT, false, 3 * sizeof(Float32))
+    ]
+    cube_mesh_for_phong = create_mesh(cube_vertices_with_normals, phong_cube_attributes)
+
+    phong_vertex_shader_source = """
+        #version 330 core
+        layout (location = 0) in vec3 aPos;
+        layout (location = 1) in vec3 aNormal;
+
+        out vec3 FragPos;
+        out vec3 Normal;
+
+        uniform mat4 model;
+        uniform mat4 view;
+        uniform mat4 projection;
+
+        void main()
+        {
+            FragPos = vec3(model * vec4(aPos, 1.0));
+            Normal = mat3(transpose(inverse(model))) * aNormal;
+            gl_Position = projection * view * vec4(FragPos, 1.0);
+        }
+    """
+
+    phong_fragment_shader_source = """
+        #version 330 core
+        out vec4 FragColor;
+
+        in vec3 FragPos;
+        in vec3 Normal;
+
+        uniform vec3 lightPos;
+        uniform vec3 viewPos;
+        uniform vec3 objectColor;
+        uniform vec3 lightColor;
+
+        void main()
+        {
+            // Ambient
+            float ambientStrength = 0.1;
+            vec3 ambient = ambientStrength * lightColor;
+
+            // Diffuse
+            vec3 norm = normalize(Normal);
+            vec3 lightDir = normalize(lightPos - FragPos);
+            float diff = max(dot(norm, lightDir), 0.0);
+            vec3 diffuse = diff * lightColor;
+
+            // Specular
+            float specularStrength = 0.5;
+            vec3 viewDir = normalize(viewPos - FragPos);
+            vec3 reflectDir = reflect(-lightDir, norm);
+            float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
+            vec3 specular = specularStrength * spec * lightColor;
+
+            vec3 result = (ambient + diffuse + specular) * objectColor;
+            FragColor = vec4(result, 1.0);
+        }
+    """
+    phong_shader = create_shader_program(phong_vertex_shader_source, phong_fragment_shader_source)
+
     set_canvas(canvas)
     clear()
     update_ortho_projection_matrix(canvas.width, canvas.height, 1.0)
@@ -1910,7 +2018,27 @@ function test_scene_3d()
         save()
         translate(0, 0, 10)
         scale(0.5)
-        draw_mesh(cube_mesh, canvas.texture)
+        
+        glUseProgram(phong_shader.program_id)
+        model_loc = glGetUniformLocation(phong_shader.program_id, "model")
+        view_loc = glGetUniformLocation(phong_shader.program_id, "view")
+        proj_loc = glGetUniformLocation(phong_shader.program_id, "projection")
+        lightPos_loc = glGetUniformLocation(phong_shader.program_id, "lightPos")
+        viewPos_loc = glGetUniformLocation(phong_shader.program_id, "viewPos")
+        objectColor_loc = glGetUniformLocation(phong_shader.program_id, "objectColor")
+        lightColor_loc = glGetUniformLocation(phong_shader.program_id, "lightColor")
+        glUniformMatrix4fv(model_loc, 1, GL_FALSE, get_state().transform)
+        glUniformMatrix4fv(view_loc, 1, GL_FALSE, get_state().view)
+        glUniformMatrix4fv(proj_loc, 1, GL_FALSE, get_state().projection)
+        glUniform3f(lightPos_loc, 30.0, 30.0, 30.0)
+        glUniform3f(viewPos_loc, cos(frame_count / 100) * 30, sin(frame_count / 100) * 30, 0)
+        glUniform3f(objectColor_loc, 1.0, 0.5, 0.31)
+        glUniform3f(lightColor_loc, 1.0, 1.0, 1.0)
+        glBindVertexArray(cube_mesh_for_phong.vao)
+        glDrawArrays(cube_mesh_for_phong.draw_mode, 0, cube_mesh_for_phong.vertex_count)
+        glBindVertexArray(0)
+        glUseProgram(0)
+
         save()
         strokecolor(rgba(255, 0, 0, 255))
         beginpath()
