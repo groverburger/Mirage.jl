@@ -1392,7 +1392,7 @@ end
 Fills the currently defined paths using the current fill color.
 """
 function fill()
-    immediate_mesh = get_immediate_mesh()
+    immediate_mesh = get_immediate_mesh_3d()
     state::ContextState = get_state()
 
     for path in state.paths
@@ -1401,17 +1401,17 @@ function fill()
         end
 
         # Simple triangulation using the first vertex as the center
-        center_x, center_y = path[1]
+        center_x, center_y, center_z = path[1]
         vertices = Float32[]
 
         for i in 2:(length(path) - 1)
-            x1, y1 = path[i]
-            x2, y2 = path[i + 1]
+            x1, y1, z1 = path[i]
+            x2, y2, z2 = path[i + 1]
 
             append!(vertices, Float32[
-                center_x, center_y, 0.5, 0.5, # Center vertex
-                x1, y1, 0.0, 0.0,             # First vertex on edge
-                x2, y2, 1.0, 0.0              # Second vertex on edge
+                center_x, center_y, center_z, 0.5, 0.5, # Center vertex
+                x1, y1, z1, 0.0, 0.0,             # First vertex on edge
+                x2, y2, z2, 1.0, 0.0              # Second vertex on edge
             ])
         end
 
@@ -2180,6 +2180,16 @@ function test_scene_3d()
         stroke()
         restore()
 
+        restore()
+
+        save()
+        beginpath()
+        fillcolor(rgba(0, 20, 200, 255))
+        moveto(0, 0, 0)
+        lineto(10, 0, 0)
+        lineto(50, 10, 10)
+        closepath()
+        fill()
         restore()
 
         save()
