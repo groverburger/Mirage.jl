@@ -409,6 +409,34 @@ function initialize_shader_uniform!(shader::ShaderInfo, uniform_name::String)
 end
 
 """
+    set_uniform(shader::ShaderInfo, name::String, value)
+
+Sets the value of a uniform variable in a shader program.
+"""
+function set_uniform(shader::ShaderInfo, name::String, value::Matrix{Float32})
+    glUniformMatrix4fv(get(shader.uniform_locations, name, -1), 1, GL_FALSE, value)
+end
+
+function set_uniform(shader::ShaderInfo, name::String, value::Float32)
+    glUniform1f(get(shader.uniform_locations, name, -1), value)
+end
+
+function set_uniform(shader::ShaderInfo, name::String, value::Vector{Float32})
+    loc = get(shader.uniform_locations, name, -1)
+    if length(value) == 3
+        glUniform3fv(loc, 1, value)
+    elseif length(value) == 4
+        glUniform4fv(loc, 1, value)
+    else
+        error("Unsupported vector size for uniform")
+    end
+end
+
+function set_uniform(shader::ShaderInfo, name::String, value::Int)
+    glUniform1i(get(shader.uniform_locations, name, -1), value)
+end
+
+"""
     create_context_info()
 
 Retrieves and processes OpenGL context information, including GLSL version, OpenGL version, vendor, and renderer.
@@ -1990,6 +2018,13 @@ function test_scene_3d()
         }
     """
     phong_shader = create_shader_program(phong_vertex_shader_source, phong_fragment_shader_source)
+    initialize_shader_uniform!(phong_shader, "model")
+    initialize_shader_uniform!(phong_shader, "view")
+    initialize_shader_uniform!(phong_shader, "projection")
+    initialize_shader_uniform!(phong_shader, "lightPos")
+    initialize_shader_uniform!(phong_shader, "viewPos")
+    initialize_shader_uniform!(phong_shader, "objectColor")
+    initialize_shader_uniform!(phong_shader, "lightColor")
 
     set_canvas(canvas)
     clear()
@@ -2013,31 +2048,22 @@ function test_scene_3d()
         fillcolor(rgba(255, 255, 255, 255))
         fillrect(0, 0, 1, 1)
 
-        lookat(Float32[cos(frame_count / 100) * 30, sin(frame_count / 100) * 30, 0], Float32[0, 0, 0], Float32[0, 0, 1])
+        cam_pos = Float32[cos(frame_count / 100) * 30, sin(frame_count / 100) * 30, 0]
+        lookat(cam_pos, Float32[0, 0, 0], Float32[0, 0, 1])
 
         save()
         translate(0, 0, 10)
         scale(0.5)
         
-        glUseProgram(phong_shader.program_id)
-        model_loc = glGetUniformLocation(phong_shader.program_id, "model")
-        view_loc = glGetUniformLocation(phong_shader.program_id, "view")
-        proj_loc = glGetUniformLocation(phong_shader.program_id, "projection")
-        lightPos_loc = glGetUniformLocation(phong_shader.program_id, "lightPos")
-        viewPos_loc = glGetUniformLocation(phong_shader.program_id, "viewPos")
-        objectColor_loc = glGetUniformLocation(phong_shader.program_id, "objectColor")
-        lightColor_loc = glGetUniformLocation(phong_shader.program_id, "lightColor")
-        glUniformMatrix4fv(model_loc, 1, GL_FALSE, get_state().transform)
-        glUniformMatrix4fv(view_loc, 1, GL_FALSE, get_state().view)
-        glUniformMatrix4fv(proj_loc, 1, GL_FALSE, get_state().projection)
-        glUniform3f(lightPos_loc, 30.0, 30.0, 30.0)
-        glUniform3f(viewPos_loc, cos(frame_count / 100) * 30, sin(frame_count / 100) * 30, 0)
-        glUniform3f(objectColor_loc, 1.0, 0.5, 0.31)
-        glUniform3f(lightColor_loc, 1.0, 1.0, 1.0)
-        glBindVertexArray(cube_mesh_for_phong.vao)
-        glDrawArrays(cube_mesh_for_phong.draw_mode, 0, cube_mesh_for_phong.vertex_count)
-        glBindVertexArray(0)
-        glUseProgram(0)
+        draw_mesh(cube_mesh_for_phong, phong_shader, shader -> begin
+            set_uniform(shader, "model", get_state().transform)
+            set_uniform(shader, "view", get_state().view)
+            set_uniform(shader, "projection", get_state().projection)
+            set_uniform(shader, "lightPos", Float32[30, 30, 30])
+            set_uniform(shader, "viewPos", cam_pos)
+            set_uniform(shader, "objectColor", Float32[1.0, 0.5, 0.31])
+            set_uniform(shader, "lightColor", Float32[1.0, 1.0, 1.0])
+        end)
 
         save()
         strokecolor(rgba(255, 0, 0, 255))

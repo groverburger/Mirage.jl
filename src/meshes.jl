@@ -197,6 +197,20 @@ function draw_mesh(mesh::Mesh)
 end
 
 """
+    draw_mesh(mesh::Mesh, shader::ShaderInfo, setup_uniforms::Function)
+
+Draws a mesh with a custom shader and uniforms.
+"""
+function draw_mesh(mesh::Mesh, shader::ShaderInfo, setup_uniforms::Function)
+    glUseProgram(shader.program_id)
+    setup_uniforms(shader)
+    glBindVertexArray(mesh.vao)
+    glDrawArrays(mesh.draw_mode, 0, mesh.vertex_count)
+    glBindVertexArray(0)
+    glUseProgram(0)
+end
+
+"""
     count_vertices(attributes::Vector, vertices::Vector)
 
 Calculates the number of vertices in a vertex data vector based on the provided attributes.
