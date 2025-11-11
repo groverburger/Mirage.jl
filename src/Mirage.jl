@@ -1261,50 +1261,50 @@ function stroke()
     immediate_mesh = get_immediate_mesh_3d()
     state::ContextState = get_state()
     all_vertices::Vector{Float32} = Float32[]
-    half_stroke = state.stroke_width / 2.0
+    half_stroke::Float32 = state.stroke_width / 2.0f0
 
     for path in state.paths
         if length(path) < 2
             continue
         end
 
-        is_closed = path[1] == path[end]
+        is_closed::Bool = path[1] == path[end]
         
-        left_vertices = []
-        right_vertices = []
+        left_vertices = Vector{Tuple{Float32, Float32, Float32}}()
+        right_vertices = Vector{Tuple{Float32, Float32, Float32}}()
 
         if is_closed
-            num_points = length(path)
+            num_points::Int = length(path)
             # Path is closed, so we loop through all points and compute miters
             for i in 1:(num_points - 1) # num_points-1 because the last point is a duplicate
-                p_prev = (i == 1) ? path[num_points-1] : path[i-1]
-                p_curr = path[i]
-                p_next = path[i+1]
+                p_prev::Tuple{Float32, Float32, Float32} = (i == 1) ? path[num_points-1] : path[i-1]
+                p_curr::Tuple{Float32, Float32, Float32} = path[i]
+                p_next::Tuple{Float32, Float32, Float32} = path[i+1]
 
-                v1_x, v1_y = p_curr[1] - p_prev[1], p_curr[2] - p_prev[2]
-                v2_x, v2_y = p_next[1] - p_curr[1], p_next[2] - p_curr[2]
+                v1_x::Float32, v1_y::Float32 = p_curr[1] - p_prev[1], p_curr[2] - p_prev[2]
+                v2_x::Float32, v2_y::Float32 = p_next[1] - p_curr[1], p_next[2] - p_curr[2]
 
-                len1 = sqrt(v1_x^2 + v1_y^2); v1_x /= len1; v1_y /= len1
-                len2 = sqrt(v2_x^2 + v2_y^2); v2_x /= len2; v2_y /= len2
+                len1::Float32 = sqrt(v1_x^2 + v1_y^2); v1_x /= len1; v1_y /= len1
+                len2::Float32 = sqrt(v2_x^2 + v2_y^2); v2_x /= len2; v2_y /= len2
 
-                n1_x, n1_y = -v1_y, v1_x
-                n2_x, n2_y = -v2_y, v2_x
+                n1_x::Float32, n1_y::Float32 = -v1_y, v1_x
+                n2_x::Float32, n2_y::Float32 = -v2_y, v2_x
 
-                miter_x, miter_y = n1_x + n2_x, n1_y + n2_y
-                miter_len_sq = miter_x^2 + miter_y^2
+                miter_x::Float32, miter_y::Float32 = n1_x + n2_x, n1_y + n2_y
+                miter_len_sq::Float32 = miter_x^2 + miter_y^2
 
                 if miter_len_sq > 1e-6
-                    miter_len = sqrt(miter_len_sq)
+                    miter_len::Float32 = sqrt(miter_len_sq)
                     miter_x /= miter_len
                     miter_y /= miter_len
 
-                    dot_product = n1_x * n2_x + n1_y * n2_y
-                    miter_scale = 1.0 / sqrt(max(0.001, (1.0 + dot_product) / 2.0))
+                    dot_product::Float32 = n1_x * n2_x + n1_y * n2_y
+                    miter_scale::Float32 = 1.0f0 / sqrt(max(0.001f0, (1.0f0 + dot_product) / 2.0f0))
 
-                    if miter_scale > 4.0; miter_scale = 4.0; end
+                    if miter_scale > 4.0f0; miter_scale = 4.0f0; end
 
-                    miter_dx = miter_x * miter_scale * half_stroke
-                    miter_dy = miter_y * miter_scale * half_stroke
+                    miter_dx::Float32 = miter_x * miter_scale * half_stroke
+                    miter_dy::Float32 = miter_y * miter_scale * half_stroke
 
                     push!(left_vertices, (p_curr[1] - miter_dx, p_curr[2] - miter_dy, p_curr[3]))
                     push!(right_vertices, (p_curr[1] + miter_dx, p_curr[2] + miter_dy, p_curr[3]))
@@ -1319,35 +1319,35 @@ function stroke()
 
         else # Open path
             # Process first point
-            p1 = path[1]; p2 = path[2]
-            dir_x = p2[1] - p1[1]; dir_y = p2[2] - p1[2]
-            len = sqrt(dir_x^2 + dir_y^2); dir_x /= len; dir_y /= len
-            normal_x = -dir_y; normal_y = dir_x
+            p1::Tuple{Float32, Float32, Float32} = path[1]; p2::Tuple{Float32, Float32, Float32} = path[2]
+            dir_x::Float32 = p2[1] - p1[1]; dir_y::Float32 = p2[2] - p1[2]
+            len::Float32 = sqrt(dir_x^2 + dir_y^2); dir_x /= len; dir_y /= len
+            normal_x::Float32 = -dir_y; normal_y::Float32 = dir_x
             push!(left_vertices, (p1[1] - normal_x * half_stroke, p1[2] - normal_y * half_stroke, p1[3]))
             push!(right_vertices, (p1[1] + normal_x * half_stroke, p1[2] + normal_y * half_stroke, p1[3]))
 
             # Process intermediate points
             for i in 2:(length(path) - 1)
-                p_prev = path[i-1]; p_curr = path[i]; p_next = path[i+1]
-                v1_x = p_curr[1] - p_prev[1]; v1_y = p_curr[2] - p_prev[2]
-                len1 = sqrt(v1_x^2 + v1_y^2); v1_x /= len1; v1_y /= len1
-                n1_x = -v1_y; n1_y = v1_x
+                p_prev::Tuple{Float32, Float32, Float32} = path[i-1]; p_curr::Tuple{Float32, Float32, Float32} = path[i]; p_next::Tuple{Float32, Float32, Float32} = path[i+1]
+                v1_x::Float32 = p_curr[1] - p_prev[1]; v1_y::Float32 = p_curr[2] - p_prev[2]
+                len1::Float32 = sqrt(v1_x^2 + v1_y^2); v1_x /= len1; v1_y /= len1
+                n1_x::Float32 = -v1_y; n1_y::Float32 = v1_x
 
-                v2_x = p_next[1] - p_curr[1]; v2_y = p_next[2] - p_curr[2]
-                len2 = sqrt(v2_x^2 + v2_y^2); v2_x /= len2; v2_y /= len2
-                n2_x = -v2_y; n2_y = v2_x
+                v2_x::Float32 = p_next[1] - p_curr[1]; v2_y::Float32 = p_next[2] - p_curr[2]
+                len2::Float32 = sqrt(v2_x^2 + v2_y^2); v2_x /= len2; v2_y /= len2
+                n2_x::Float32 = -v2_y; n2_y::Float32 = v2_x
 
-                miter_x = n1_x + n2_x; miter_y = n1_y + n2_y
-                miter_len_sq = miter_x^2 + miter_y^2
+                miter_x::Float32 = n1_x + n2_x; miter_y::Float32 = n1_y + n2_y
+                miter_len_sq::Float32 = miter_x^2 + miter_y^2
                 
                 if miter_len_sq > 1e-6
-                    miter_len = sqrt(miter_len_sq)
+                    miter_len::Float32 = sqrt(miter_len_sq)
                     miter_x /= miter_len; miter_y /= miter_len
-                    dot_product = n1_x * n2_x + n1_y * n2_y
-                    miter_scale = 1.0 / sqrt(max(0.001, (1.0 + dot_product) / 2.0))
-                    if miter_scale > 4.0; miter_scale = 4.0; end
-                    miter_dx = miter_x * miter_scale * half_stroke
-                    miter_dy = miter_y * miter_scale * half_stroke
+                    dot_product::Float32 = n1_x * n2_x + n1_y * n2_y
+                    miter_scale::Float32 = 1.0f0 / sqrt(max(0.001f0, (1.0f0 + dot_product) / 2.0f0))
+                    if miter_scale > 4.0f0; miter_scale = 4.0f0; end
+                    miter_dx::Float32 = miter_x * miter_scale * half_stroke
+                    miter_dy::Float32 = miter_y * miter_scale * half_stroke
                     push!(left_vertices, (p_curr[1] - miter_dx, p_curr[2] - miter_dy, p_curr[3]))
                     push!(right_vertices, (p_curr[1] + miter_dx, p_curr[2] + miter_dy, p_curr[3]))
                 else
@@ -1357,7 +1357,7 @@ function stroke()
             end
 
             # Process last point
-            p_last = path[end]; p_before_last = path[end-1]
+            p_last::Tuple{Float32, Float32, Float32} = path[end]; p_before_last::Tuple{Float32, Float32, Float32} = path[end-1]
             dir_x = p_last[1] - p_before_last[1]; dir_y = p_last[2] - p_before_last[2]
             len = sqrt(dir_x^2 + dir_y^2); dir_x /= len; dir_y /= len
             normal_x = -dir_y; normal_y = dir_x
@@ -1367,16 +1367,16 @@ function stroke()
 
         # Create triangles for both open and closed paths
         for i in 1:(length(left_vertices) - 1)
-            l1 = left_vertices[i]; r1 = right_vertices[i]
-            l2 = left_vertices[i+1]; r2 = right_vertices[i+1]
+            l1::Tuple{Float32, Float32, Float32} = left_vertices[i]; r1::Tuple{Float32, Float32, Float32} = right_vertices[i]
+            l2::Tuple{Float32, Float32, Float32} = left_vertices[i+1]; r2::Tuple{Float32, Float32, Float32} = right_vertices[i+1]
 
-            append!(all_vertices, [l1[1], l1[2], l1[3], 0.0, 0.0])
-            append!(all_vertices, [r1[1], r1[2], r1[3], 1.0, 0.0])
-            append!(all_vertices, [l2[1], l2[2], l2[3], 0.0, 1.0])
+            append!(all_vertices, Float32[l1[1], l1[2], l1[3], 0.0f0, 0.0f0])
+            append!(all_vertices, Float32[r1[1], r1[2], r1[3], 1.0f0, 0.0f0])
+            append!(all_vertices, Float32[l2[1], l2[2], l2[3], 0.0f0, 1.0f0])
 
-            append!(all_vertices, [l2[1], l2[2], l2[3], 0.0, 1.0])
-            append!(all_vertices, [r1[1], r1[2], r1[3], 1.0, 0.0])
-            append!(all_vertices, [r2[1], r2[2], r2[3], 1.0, 1.0])
+            append!(all_vertices, Float32[l2[1], l2[2], l2[3], 0.0f0, 1.0f0])
+            append!(all_vertices, Float32[r1[1], r1[2], r1[3], 1.0f0, 0.0f0])
+            append!(all_vertices, Float32[r2[1], r2[2], r2[3], 1.0f0, 1.0f0])
         end
     end
 
@@ -1401,17 +1401,17 @@ function fill()
         end
 
         # Simple triangulation using the first vertex as the center
-        center_x, center_y, center_z = path[1]
-        vertices = Float32[]
+        center_x::Float32, center_y::Float32, center_z::Float32 = path[1]
+        vertices = Vector{Float32}()
 
         for i in 2:(length(path) - 1)
-            x1, y1, z1 = path[i]
-            x2, y2, z2 = path[i + 1]
+            x1::Float32, y1::Float32, z1::Float32 = path[i]
+            x2::Float32, y2::Float32, z2::Float32 = path[i + 1]
 
             append!(vertices, Float32[
-                center_x, center_y, center_z, 0.5, 0.5, # Center vertex
-                x1, y1, z1, 0.0, 0.0,             # First vertex on edge
-                x2, y2, z2, 1.0, 0.0              # Second vertex on edge
+                center_x, center_y, center_z, 0.5f0, 0.5f0, # Center vertex
+                x1, y1, z1, 0.0f0, 0.0f0,             # First vertex on edge
+                x2, y2, z2, 1.0f0, 0.0f0              # Second vertex on edge
             ])
         end
 

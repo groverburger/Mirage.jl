@@ -211,7 +211,7 @@ function draw_mesh(mesh::Mesh, shader::ShaderInfo, setup_uniforms::Function)
 end
 
 """
-    count_vertices(attributes::Vector, vertices::Vector)
+    count_vertices(attributes::Vector, vertices::Vector)::Int64
 
 Calculates the number of vertices in a vertex data vector based on the provided attributes.
 
@@ -222,8 +222,11 @@ Calculates the number of vertices in a vertex data vector based on the provided 
 # Returns
 The number of vertices.
 """
-function count_vertices(attributes::Vector, vertices::Vector)
-    stride::Int = sum([attr.size for attr in attributes])
+function count_vertices(attributes::Vector, vertices::Vector)::Int64
+    stride::Int64 = 0
+    for attr in attributes
+        stride += attr.size
+    end
     return div(length(vertices), stride)
 end
 
