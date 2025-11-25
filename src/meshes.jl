@@ -252,14 +252,14 @@ end
 
 # Destroy mesh and free GPU resources
 """
-    destroy_mesh(mesh::Mesh)
+    destroy!(mesh::Mesh)
 
 Frees the GPU resources (VAO and VBO) associated with a `Mesh` object.
 
 # Arguments
 - `mesh`: The `Mesh` object to destroy.
 """
-function destroy_mesh(mesh::Mesh)
+function destroy!(mesh::Mesh)
     # Delete VBO
     if mesh.vbo != 0
         glDeleteBuffers(1, [mesh.vbo])

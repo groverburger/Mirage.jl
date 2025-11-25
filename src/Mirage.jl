@@ -879,6 +879,27 @@ function destroy!(canvas::Canvas)
     canvas.rbo = 0
 end
 
+"""
+    destroy_texture!(texture_id::GLuint)
+
+Frees the GPU resources associated with a texture.
+
+It is the responsibility of the caller to ensure that the texture ID is no
+longer used after calling this function. Consider setting your texture ID
+variable to `0` to prevent accidental use of a deleted texture.
+
+# Arguments
+- `texture_id`: The ID of the texture to destroy.
+"""
+function destroy_texture!(texture_id::GLuint)
+    if texture_id == 0
+        @warn "Attempting to delete a texture with ID 0. This is a no-op."
+        return
+    end
+    glDeleteTextures(1, [texture_id])
+    gl_check_error("deleting texture")
+end
+
 @kwdef mutable struct ContextState
     transform::Matrix{Float32} = Float32[1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 1]
     view::Matrix{Float32} = Float32[1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 1]
@@ -2206,7 +2227,7 @@ function test_scene_3d()
     end)
 
     destroy!(canvas)
-    destroy_mesh(obj_mesh)
+    destroy!(obj_mesh)
 end
 
 export
