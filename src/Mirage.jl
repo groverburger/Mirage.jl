@@ -2,7 +2,6 @@ module Mirage
 
 import GLFW
 using ModernGL
-using Revise
 using FileIO
 using ImageIO
 using Images
