@@ -570,9 +570,9 @@ Normalizes a 3-element Float32 vector.
 # Returns
 The normalized vector.
 """
-function normalize(v::Vector{Float32})::Vector{Float32}
-    len = sqrt(sum(v .^ 2))
-    return len > 0.0f0 ? v ./ len : v
+function normalize(v::Vector{T})::Vector{T} where T
+    len::Number = sqrt(sum(v .^ 2))
+    return len > 0 ? v ./ len : v
 end
 
 """
@@ -1390,13 +1390,13 @@ function stroke()
             l1::Tuple{Float32, Float32, Float32} = left_vertices[i]; r1::Tuple{Float32, Float32, Float32} = right_vertices[i]
             l2::Tuple{Float32, Float32, Float32} = left_vertices[i+1]; r2::Tuple{Float32, Float32, Float32} = right_vertices[i+1]
 
-            append!(all_vertices, Float32[l1[1], l1[2], l1[3], 0.0f0, 0.0f0])
-            append!(all_vertices, Float32[r1[1], r1[2], r1[3], 1.0f0, 0.0f0])
-            append!(all_vertices, Float32[l2[1], l2[2], l2[3], 0.0f0, 1.0f0])
+            append!(all_vertices, Float32[l1[1], l1[2], l1[3], 0.0f0, 0.0f0, 0.0, 0.0, 1.0])
+            append!(all_vertices, Float32[r1[1], r1[2], r1[3], 1.0f0, 0.0f0, 0.0, 0.0, 1.0])
+            append!(all_vertices, Float32[l2[1], l2[2], l2[3], 0.0f0, 1.0f0, 0.0, 0.0, 1.0])
 
-            append!(all_vertices, Float32[l2[1], l2[2], l2[3], 0.0f0, 1.0f0])
-            append!(all_vertices, Float32[r1[1], r1[2], r1[3], 1.0f0, 0.0f0])
-            append!(all_vertices, Float32[r2[1], r2[2], r2[3], 1.0f0, 1.0f0])
+            append!(all_vertices, Float32[l2[1], l2[2], l2[3], 0.0f0, 1.0f0, 0.0, 0.0, 1.0])
+            append!(all_vertices, Float32[r1[1], r1[2], r1[3], 1.0f0, 0.0f0, 0.0, 0.0, 1.0])
+            append!(all_vertices, Float32[r2[1], r2[2], r2[3], 1.0f0, 1.0f0, 0.0, 0.0, 1.0])
         end
     end
 
@@ -1429,9 +1429,9 @@ function fill()
             x2::Float32, y2::Float32, z2::Float32 = path[i + 1]
 
             append!(vertices, Float32[
-                center_x, center_y, center_z, 0.5f0, 0.5f0, # Center vertex
-                x1, y1, z1, 0.0f0, 0.0f0,             # First vertex on edge
-                x2, y2, z2, 1.0f0, 0.0f0              # Second vertex on edge
+                center_x, center_y, center_z, 0.5f0, 0.5f0, 0.0, 0.0, 1.0, # Center vertex
+                x1, y1, z1, 0.0f0, 0.0f0, 0.0, 0.0, 1.0,             # First vertex on edge
+                x2, y2, z2, 1.0f0, 0.0f0, 0.0, 0.0, 1.0              # Second vertex on edge
             ])
         end
 
@@ -2227,6 +2227,9 @@ function test_scene_3d()
 
     destroy!(canvas)
     destroy!(obj_mesh)
+    destroy!(sphere_mesh)
+    destroy!(cube_mesh)
+    destroy!(cube_mesh_for_phong)
 end
 
 export

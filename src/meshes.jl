@@ -36,7 +36,8 @@ get_default_attributes() = [
 
 get_default_3d_attributes() = [
     VertexAttribute(0, 3, GL_FLOAT, false, 0),                    # Position (x, y, z)
-    VertexAttribute(1, 2, GL_FLOAT, false, 3 * sizeof(Float32))   # Texture coordinates (u, v)]
+    VertexAttribute(1, 2, GL_FLOAT, false, 3 * sizeof(Float32)),  # Texture coordinates (u, v)
+    VertexAttribute(2, 3, GL_FLOAT, false, 5 * sizeof(Float32))   # Normal (nx, ny, nz)
 ]
 
 """
@@ -106,18 +107,18 @@ function create_mesh(vertices::Vector{T} = Float32[0, 0, 0, 0],
 end
 
 """
-    create_3d_mesh(vertices::Vector{Float32} = Float32[0, 0, 0, 0, 0]; kwargs...)
+    create_3d_mesh(vertices::Vector{Float32} = Float32[0, 0, 0, 0, 0, 0, 0, 0]; kwargs...)
 
 Creates a new 3D `Mesh` object with default 3D attributes and uploads vertex data to the GPU.
 
 # Arguments
-- `vertices`: A vector of vertex data. Expected format is `[x, y, z, u, v, ...]`. Defaults to a single dummy vertex.
+- `vertices`: A vector of vertex data. Expected format is `[x, y, z, u, v, nx, ny, nz, ...]`. Defaults to a single dummy vertex.
 - `kwargs...`: Additional keyword arguments passed to `create_mesh` (e.g., `draw_mode`).
 
 # Returns
 A new `Mesh` object configured for 3D rendering.
 """
-function create_3d_mesh(vertices::Vector{Float32} = Float32[0, 0, 0, 0, 0]; kwargs...)
+function create_3d_mesh(vertices::Vector{Float32} = Float32[0, 0, 0, 0, 0, 0, 0, 0]; kwargs...)
     return create_mesh(vertices, get_default_3d_attributes(); kwargs...)
 end
 
@@ -345,7 +346,7 @@ end
 """
     create_cube(size::Number = 1.0)
 
-Creates a 3D cube mesh with position and texture coordinates for each face.
+Creates a 3D cube mesh with position, texture coordinates, and normals for each face.
 
 # Arguments
 - `size`: The side length of the cube (defaults to 1.0).
@@ -357,56 +358,56 @@ function create_cube(size::Number = 1.0)
     # Half size for centering
     s::Float32 = Float32(size / 2)
 
-    # Vertices for all 6 faces of the cube (12 triangles total)
-    # Each vertex has: x, y, z, u, v (position + texture coordinates)
+    # Vertices for all 6 faces of the cube
+    # Each vertex: x, y, z, u, v, nx, ny, nz
     vertices = Float32[
-        # Front face (2 triangles)
-        -s, -s,  s, 0, 0,  # Bottom-left
-         s, -s,  s, 1, 0,  # Bottom-right
-        -s,  s,  s, 0, 1,  # Top-left
-         s, -s,  s, 1, 0,  # Bottom-right
-        -s,  s,  s, 0, 1,  # Top-left
-         s,  s,  s, 1, 1,  # Top-right
+        # Front face (normal: 0, 0, 1)
+        -s, -s,  s, 0, 0, 0, 0, 1,
+         s, -s,  s, 1, 0, 0, 0, 1,
+        -s,  s,  s, 0, 1, 0, 0, 1,
+         s, -s,  s, 1, 0, 0, 0, 1,
+        -s,  s,  s, 0, 1, 0, 0, 1,
+         s,  s,  s, 1, 1, 0, 0, 1,
 
-        # Back face (2 triangles)
-         s, -s, -s, 0, 0,  # Bottom-left
-        -s, -s, -s, 1, 0,  # Bottom-right
-         s,  s, -s, 0, 1,  # Top-left
-        -s, -s, -s, 1, 0,  # Bottom-right
-         s,  s, -s, 0, 1,  # Top-left
-        -s,  s, -s, 1, 1,  # Top-right
+        # Back face (normal: 0, 0, -1)
+         s, -s, -s, 0, 0, 0, 0, -1,
+        -s, -s, -s, 1, 0, 0, 0, -1,
+         s,  s, -s, 0, 1, 0, 0, -1,
+        -s, -s, -s, 1, 0, 0, 0, -1,
+         s,  s, -s, 0, 1, 0, 0, -1,
+        -s,  s, -s, 1, 1, 0, 0, -1,
 
-        # Left face (2 triangles)
-        -s, -s, -s, 0, 0,  # Bottom-left
-        -s, -s,  s, 1, 0,  # Bottom-right
-        -s,  s, -s, 0, 1,  # Top-left
-        -s, -s,  s, 1, 0,  # Bottom-right
-        -s,  s, -s, 0, 1,  # Top-left
-        -s,  s,  s, 1, 1,  # Top-right
+        # Left face (normal: -1, 0, 0)
+        -s, -s, -s, 0, 0, -1, 0, 0,
+        -s, -s,  s, 1, 0, -1, 0, 0,
+        -s,  s, -s, 0, 1, -1, 0, 0,
+        -s, -s,  s, 1, 0, -1, 0, 0,
+        -s,  s, -s, 0, 1, -1, 0, 0,
+        -s,  s,  s, 1, 1, -1, 0, 0,
 
-        # Right face (2 triangles)
-         s, -s,  s, 0, 0,  # Bottom-left
-         s, -s, -s, 1, 0,  # Bottom-right
-         s,  s,  s, 0, 1,  # Top-left
-         s, -s, -s, 1, 0,  # Bottom-right
-         s,  s,  s, 0, 1,  # Top-left
-         s,  s, -s, 1, 1,  # Top-right
+        # Right face (normal: 1, 0, 0)
+         s, -s,  s, 0, 0, 1, 0, 0,
+         s, -s, -s, 1, 0, 1, 0, 0,
+         s,  s,  s, 0, 1, 1, 0, 0,
+         s, -s, -s, 1, 0, 1, 0, 0,
+         s,  s,  s, 0, 1, 1, 0, 0,
+         s,  s, -s, 1, 1, 1, 0, 0,
 
-        # Top face (2 triangles)
-        -s,  s,  s, 0, 0,  # Bottom-left
-         s,  s,  s, 1, 0,  # Bottom-right
-        -s,  s, -s, 0, 1,  # Top-left
-         s,  s,  s, 1, 0,  # Bottom-right
-        -s,  s, -s, 0, 1,  # Top-left
-         s,  s, -s, 1, 1,  # Top-right
+        # Top face (normal: 0, 1, 0)
+        -s,  s,  s, 0, 0, 0, 1, 0,
+         s,  s,  s, 1, 0, 0, 1, 0,
+        -s,  s, -s, 0, 1, 0, 1, 0,
+         s,  s,  s, 1, 0, 0, 1, 0,
+        -s,  s, -s, 0, 1, 0, 1, 0,
+         s,  s, -s, 1, 1, 0, 1, 0,
 
-        # Bottom face (2 triangles)
-        -s, -s, -s, 0, 0,  # Bottom-left
-         s, -s, -s, 1, 0,  # Bottom-right
-        -s, -s,  s, 0, 1,  # Top-left
-         s, -s, -s, 1, 0,  # Bottom-right
-        -s, -s,  s, 0, 1,  # Top-left
-         s, -s,  s, 1, 1   # Top-right
+        # Bottom face (normal: 0, -1, 0)
+        -s, -s, -s, 0, 0, 0, -1, 0,
+         s, -s, -s, 1, 0, 0, -1, 0,
+        -s, -s,  s, 0, 1, 0, -1, 0,
+         s, -s, -s, 1, 0, 0, -1, 0,
+        -s, -s,  s, 0, 1, 0, -1, 0,
+         s, -s,  s, 1, 1, 0, -1, 0
     ]
 
     return create_3d_mesh(vertices)
@@ -415,7 +416,7 @@ end
 """
     create_uv_sphere(radius::Number = 1.0, u_segments::Int = 32, v_segments::Int = 16)
 
-Creates a UV sphere mesh with position and texture coordinates.
+Creates a UV sphere mesh with position, texture coordinates, and normals.
 
 # Arguments
 - `radius`: The radius of the sphere (defaults to 1.0).
@@ -430,64 +431,65 @@ function create_uv_sphere(radius::Number = 1.0, u_segments::Int = 32, v_segments
     r::Float32 = Float32(radius)
     
     for i in 0:v_segments-1
-        v1 = Float32(i) / Float32(v_segments) * pi
-        v2 = Float32(i + 1) / Float32(v_segments) * pi
-        
+        v1_angle = Float32(i) / Float32(v_segments) * pi
+        v2_angle = Float32(i + 1) / Float32(v_segments) * pi
+
         for j in 0:u_segments-1
-            u1 = Float32(j) / Float32(u_segments) * 2pi
-            u2 = Float32(j + 1) / Float32(u_segments) * 2pi
-            
-            # Calculate the four corners of the current quad
-            # Bottom-left
-            x1 = r * cos(u1) * sin(v1)
-            y1 = r * cos(v1) 
-            z1 = r * sin(u1) * sin(v1)
-            
-            # Bottom-right  
-            x2 = r * cos(u2) * sin(v1)
-            y2 = r * cos(v1)
-            z2 = r * sin(u2) * sin(v1)
-            
-            # Top-left
-            x3 = r * cos(u1) * sin(v2)
-            y3 = r * cos(v2)
-            z3 = r * sin(u1) * sin(v2)
-            
-            # Top-right
-            x4 = r * cos(u2) * sin(v2)
-            y4 = r * cos(v2)
-            z4 = r * sin(u2) * sin(v2)
-            
+            u1_angle = Float32(j) / Float32(u_segments) * 2pi
+            u2_angle = Float32(j + 1) / Float32(u_segments) * 2pi
+
+            # Vertex positions
+            x1 = r * cos(u1_angle) * sin(v1_angle)
+            y1 = r * cos(v1_angle)
+            z1 = r * sin(u1_angle) * sin(v1_angle)
+
+            x2 = r * cos(u2_angle) * sin(v1_angle)
+            y2 = r * cos(v1_angle)
+            z2 = r * sin(u2_angle) * sin(v1_angle)
+
+            x3 = r * cos(u1_angle) * sin(v2_angle)
+            y3 = r * cos(v2_angle)
+            z3 = r * sin(u1_angle) * sin(v2_angle)
+
+            x4 = r * cos(u2_angle) * sin(v2_angle)
+            y4 = r * cos(v2_angle)
+            z4 = r * sin(u2_angle) * sin(v2_angle)
+
+            # Normals (for a sphere, normal is just the normalized position)
+            n1 = normalize([x1, y1, z1])
+            n2 = normalize([x2, y2, z2])
+            n3 = normalize([x3, y3, z3])
+            n4 = normalize([x4, y4, z4])
+
             # UV coordinates
             tex_u1 = Float32(j) / Float32(u_segments)
             tex_u2 = Float32(j + 1) / Float32(u_segments)
             tex_v1 = Float32(i) / Float32(v_segments)
             tex_v2 = Float32(i + 1) / Float32(v_segments)
-            
-            # Avoid degenerate triangles at poles
-            if i > 0  # Not at north pole
-                # First triangle: bottom-left, bottom-right, top-left
-                append!(vertices, [x1, y1, z1, tex_u1, tex_v1])
-                append!(vertices, [x2, y2, z2, tex_u2, tex_v1])
-                append!(vertices, [x3, y3, z3, tex_u1, tex_v2])
+
+            # First triangle
+            if i > 0
+                append!(vertices, [x1, y1, z1, tex_u1, tex_v1, n1...])
+                append!(vertices, [x2, y2, z2, tex_u2, tex_v1, n2...])
+                append!(vertices, [x3, y3, z3, tex_u1, tex_v2, n3...])
             end
-            
-            if i < v_segments - 1  # Not at south pole
-                # Second triangle: bottom-right, top-right, top-left
-                append!(vertices, [x2, y2, z2, tex_u2, tex_v1])
-                append!(vertices, [x4, y4, z4, tex_u2, tex_v2])
-                append!(vertices, [x3, y3, z3, tex_u1, tex_v2])
+
+            # Second triangle
+            if i < v_segments - 1
+                append!(vertices, [x2, y2, z2, tex_u2, tex_v1, n2...])
+                append!(vertices, [x4, y4, z4, tex_u2, tex_v2, n4...])
+                append!(vertices, [x3, y3, z3, tex_u1, tex_v2, n3...])
             end
         end
     end
-    
+
     return create_3d_mesh(vertices)
 end
 
 """
     load_obj_mesh(filepath::String)
 
-Loads a 3D mesh from an OBJ file. Supports positions and texture coordinates.
+Loads a 3D mesh from an OBJ file. Supports positions, texture coordinates, and normals.
 
 # Arguments
 - `filepath`: The path to the OBJ file.
@@ -499,6 +501,7 @@ function load_obj_mesh(filepath::String)
     vertices = Float32[]
     positions = Vector{Vector{Float32}}()
     texcoords = Vector{Vector{Float32}}()
+    normals = Vector{Vector{Float32}}()
 
     open(filepath, "r") do f
         for line in eachline(f)
@@ -506,41 +509,55 @@ function load_obj_mesh(filepath::String)
             if isempty(parts) continue end
 
             if parts[1] == "v"
-                push!(positions, [parse(Float32, parts[2]), parse(Float32, parts[3]), parse(Float32, parts[4])])
+                push!(positions, [parse(Float32, p) for p in parts[2:4]])
             elseif parts[1] == "vt"
-                push!(texcoords, [parse(Float32, parts[2]), parse(Float32, parts[3])])
+                push!(texcoords, [parse(Float32, p) for p in parts[2:3]])
+            elseif parts[1] == "vn"
+                push!(normals, [parse(Float32, p) for p in parts[2:4]])
             elseif parts[1] == "f"
-                # Triangulate faces with more than 3 vertices (N-gons)
-                # Assumes 1-based indexing for OBJ.
-                face_vertices = []
+                # Triangulate faces (supports N-gons)
+                face_vertices_indices = []
                 for i in 2:length(parts)
-                    v_vt_n = split(parts[i], '/')
-                    v_idx = parse(Int, v_vt_n[1])
-                    vt_idx = parse(Int, v_vt_n[2])
-                    push!(face_vertices, (v_idx, vt_idx))
+                    v_idx, vt_idx, vn_idx = 0, 0, 0
+                    v_vt_vn = split(parts[i], '/')
+
+                    # Always have a vertex index
+                    v_idx = parse(Int, v_vt_vn[1])
+
+                    if length(v_vt_vn) == 2
+                        # Format: v/vt
+                        vt_idx = parse(Int, v_vt_vn[2])
+                    elseif length(v_vt_vn) == 3
+                        # Format: v/vt/vn or v//vn
+                        if !isempty(v_vt_vn[2])
+                            vt_idx = parse(Int, v_vt_vn[2])
+                        end
+                        vn_idx = parse(Int, v_vt_vn[3])
+                    end
+                    push!(face_vertices_indices, (v_idx, vt_idx, vn_idx))
                 end
 
                 # Fan triangulation
-                if length(face_vertices) >= 3
-                    # First vertex of the face is the common vertex for the fan
-                    v1_idx, vt1_idx = face_vertices[1]
+                if length(face_vertices_indices) >= 3
+                    v1_idx, vt1_idx, vn1_idx = face_vertices_indices[1]
                     pos1 = positions[v1_idx]
-                    tc1 = texcoords[vt1_idx]
+                    tc1 = (vt1_idx > 0 && !isempty(texcoords)) ? texcoords[vt1_idx] : [0.0f0, 0.0f0]
+                    n1 = (vn1_idx > 0 && !isempty(normals)) ? normals[vn1_idx] : [0.0f0, 0.0f0, 0.0f0]
 
-                    for i in 2:(length(face_vertices) - 1)
-                        # Second vertex of the triangle
-                        v2_idx, vt2_idx = face_vertices[i]
+                    for i in 2:(length(face_vertices_indices) - 1)
+                        v2_idx, vt2_idx, vn2_idx = face_vertices_indices[i]
                         pos2 = positions[v2_idx]
-                        tc2 = texcoords[vt2_idx]
+                        tc2 = (vt2_idx > 0 && !isempty(texcoords)) ? texcoords[vt2_idx] : [0.0f0, 0.0f0]
+                        n2 = (vn2_idx > 0 && !isempty(normals)) ? normals[vn2_idx] : [0.0f0, 0.0f0, 0.0f0]
 
-                        # Third vertex of the triangle
-                        v3_idx, vt3_idx = face_vertices[i+1]
+                        v3_idx, vt3_idx, vn3_idx = face_vertices_indices[i+1]
                         pos3 = positions[v3_idx]
-                        tc3 = texcoords[vt3_idx]
+                        tc3 = (vt3_idx > 0 && !isempty(texcoords)) ? texcoords[vt3_idx] : [0.0f0, 0.0f0]
+                        n3 = (vn3_idx > 0 && !isempty(normals)) ? normals[vn3_idx] : [0.0f0, 0.0f0, 0.0f0]
 
-                        append!(vertices, pos1[1], pos1[2], pos1[3], tc1[1], tc1[2])
-                        append!(vertices, pos2[1], pos2[2], pos2[3], tc2[1], tc2[2])
-                        append!(vertices, pos3[1], pos3[2], pos3[3], tc3[1], tc3[2])
+                        append!(vertices, pos1..., tc1..., n1...)
+                        append!(vertices, pos2..., tc2..., n2...)
+                        append!(vertices, pos3..., tc3..., n3...)
                     end
                 end
             end
