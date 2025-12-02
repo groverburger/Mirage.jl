@@ -350,8 +350,7 @@ function create_shader_program(vertex_shader::String, fragment_shader::String)::
 end
 
 global glsl_version = ""
-global immediate_mesh = nothing
-global immediate_mesh_3d = nothing
+global the_immediate_mesh = nothing
 
 const texture_vertex_shader_source = """
     #version 330 core
@@ -966,7 +965,6 @@ A new `RenderContext` instance.
         #font_texture = load_texture("./ascii_font_atlas.png")
         font_texture = load_texture(map(x -> x == 1 ? RGBA(1, 1, 1, 1) : RGBA(0, 0, 0, 0), default_font))
 
-        # --- Font Setup  ---
         glBindTexture(GL_TEXTURE_2D, blank_texture)
         white_pixel = Float32[1.0, 1.0, 1.0, 1.0]
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1, 1, 0, GL_RGBA, GL_FLOAT, white_pixel)
@@ -1003,8 +1001,7 @@ function cleanup_render_context(ctx::RenderContext = get_context())
     glDeleteProgram(ctx.shader.program_id)
     glDeleteTextures(1, [ctx.blank_texture])
     glDeleteTextures(1, [ctx.font_texture])
-    global immediate_mesh = nothing
-    global immediate_mesh_3d = nothing
+    global the_immediate_mesh = nothing
 end
 
 """
@@ -1278,7 +1275,6 @@ end
 Draws the currently defined paths as stroked lines using the current stroke color and width.
 """
 function stroke()
-    immediate_mesh = get_immediate_mesh_3d()
     state::ContextState = get_state()
     all_vertices::Vector{Float32} = Float32[]
     half_stroke::Float32 = state.stroke_width / 2.0f0
@@ -1401,8 +1397,8 @@ function stroke()
     end
 
     if !isempty(all_vertices)
-        update_mesh_vertices!(immediate_mesh, all_vertices)
-        draw_mesh(immediate_mesh, get_context().blank_texture, [state.stroke_color...])
+        update_mesh_vertices!(get_immediate_mesh(), all_vertices)
+        draw_mesh(get_immediate_mesh(), get_context().blank_texture, [state.stroke_color...])
     end
 end
 
@@ -1412,7 +1408,6 @@ end
 Fills the currently defined paths using the current fill color.
 """
 function fill()
-    immediate_mesh = get_immediate_mesh_3d()
     state::ContextState = get_state()
 
     for path in state.paths
@@ -1436,8 +1431,8 @@ function fill()
         end
 
         if !isempty(vertices)
-            update_mesh_vertices!(immediate_mesh, vertices)
-            draw_mesh(immediate_mesh, get_context().blank_texture, [state.fill_color...])
+            update_mesh_vertices!(get_immediate_mesh(), vertices)
+            draw_mesh(get_immediate_mesh(), get_context().blank_texture, [state.fill_color...])
         end
     end
 end
@@ -1524,22 +1519,24 @@ function fillcircle(radius::Number, x::Number = 0, y::Number = 0, segments::Int 
         next_angle::Float32 = 2.0f0 * pi * i / segments
 
         # Center point
-        append!(vertices, 0.0f0, 0.0f0)
+        append!(vertices, 0.0f0, 0.0f0, 0.0f0)
         append!(vertices, 0.5f0, 0.5f0)
+        append!(vertices, 0.0f0, 0.0f0, 1.0f0)
 
         # Current outer point
-        append!(vertices, radius * cos(angle), radius * sin(angle))
+        append!(vertices, radius * cos(angle), radius * sin(angle), 0.0f0)
         append!(vertices, cos(angle) * 0.5f0 + 0.5f0, sin(angle) * 0.5f0 + 0.5f0)
+        append!(vertices, 0.0f0, 0.0f0, 1.0f0)
 
         # Next outer point
-        append!(vertices, radius * cos(next_angle), radius * sin(next_angle))
+        append!(vertices, radius * cos(next_angle), radius * sin(next_angle), 0.0f0)
         append!(vertices, cos(next_angle) * 0.5f0 + 0.5f0, sin(next_angle) * 0.5f0 + 0.5f0)
+        append!(vertices, 0.0f0, 0.0f0, 1.0f0)
     end
 
-    immediate_mesh = get_immediate_mesh()
     state::ContextState = get_state()
-    update_mesh_vertices!(immediate_mesh, vertices)
-    draw_mesh(immediate_mesh, get_context().blank_texture, [state.fill_color...])
+    update_mesh_vertices!(get_immediate_mesh(), vertices)
+    draw_mesh(get_immediate_mesh(), get_context().blank_texture, [state.fill_color...])
 end
 
 """
@@ -1563,16 +1560,15 @@ function drawimage(x::Number,
                    w::Number,
                    h::Number,
                    texture_id::GLuint)
-    immediate_mesh = get_immediate_mesh()
-    update_mesh_vertices!(immediate_mesh, Float32[
-        x, y,          0.0, 1.0,  # Top-left
-        x, y + h,      0.0, 0.0,  # Bottom-left
-        x + w, y + h,  1.0, 0.0,  # Bottom-right
-        x, y,          0.0, 1.0,  # Top-left
-        x + w, y + h,  1.0, 0.0,  # Bottom-right
-        x + w, y,      1.0, 1.0   # Top-right
+    update_mesh_vertices!(get_immediate_mesh(), Float32[
+        x, y, 0.0,         0.0, 1.0,  0.0, 0.0, 1.0, # Top-left
+        x, y + h, 0.0,     0.0, 0.0,  0.0, 0.0, 1.0, # Bottom-left
+        x + w, y + h, 0.0, 1.0, 0.0,  0.0, 0.0, 1.0, # Bottom-right
+        x, y, 0.0,         0.0, 1.0,  0.0, 0.0, 1.0, # Top-left
+        x + w, y + h, 0.0, 1.0, 0.0,  0.0, 0.0, 1.0, # Bottom-right
+        x + w, y, 0.0,     1.0, 1.0,  0.0, 0.0, 1.0  # Top-right
     ])
-    draw_mesh(immediate_mesh, texture_id)
+    draw_mesh(get_immediate_mesh(), texture_id)
 end
 
 # Draw text using the loaded font atlas (simplified)
@@ -1615,13 +1611,13 @@ function text(text::String)
 
             # Define quad vertices (x, y, u, v) - 6 vertices for 2 triangles
             append!(vertices, GLfloat[
-                xpos, ypos,                   u0, v1,  # Top-left
-                xpos, ypos + char_render_h,   u0, v0,  # Bottom-left
-                xpos + char_render_w, ypos + char_render_h, u1, v0,  # Bottom-right
+                xpos, ypos, 0.0f0,                  u0, v1, 0.0f0, 0.0f0, 1.0f0, # Top-left
+                xpos, ypos + char_render_h, 0.0f0,  u0, v0, 0.0f0, 0.0f0, 1.0f0, # Bottom-left
+                xpos + char_render_w, ypos + char_render_h, 0.0f0, u1, v0, 0.0f0, 0.0f0, 1.0f0, # Bottom-right
 
-                xpos, ypos,                   u0, v1,  # Top-left
-                xpos + char_render_w, ypos + char_render_h, u1, v0,  # Bottom-right
-                xpos + char_render_w, ypos,   u1, v1   # Top-right
+                xpos, ypos, 0.0f0,                  u0, v1, 0.0f0, 0.0f0, 1.0f0, # Top-left
+                xpos + char_render_w, ypos + char_render_h, 0.0f0, u1, v0, 0.0f0, 0.0f0, 1.0f0, # Bottom-right
+                xpos + char_render_w, ypos, 0.0f0,  u1, v1, 0.0f0, 0.0f0, 1.0f0 # Top-right
             ])
 
             # Advance cursor (simplified fixed width advance)
@@ -1633,46 +1629,26 @@ function text(text::String)
     end
 
     if !isempty(vertices)
-        # Upload all vertex data for the entire string at once
-        immediate_mesh = get_immediate_mesh()
-        update_mesh_vertices!(immediate_mesh, vertices)
-        # Draw all characters
-        draw_mesh(immediate_mesh, ctx.font_texture, [get_state().fill_color...])
+        update_mesh_vertices!(get_immediate_mesh(), vertices)
+        draw_mesh(get_immediate_mesh(), ctx.font_texture, [get_state().fill_color...])
     end
 end
 
 """
     get_immediate_mesh()
 
-Retrieves or creates the global 2D immediate mode mesh for drawing.
+Retrieves or creates the global immediate mode mesh for drawing.
 
 # Returns
-The `Mesh` object for 2D immediate mode drawing.
+The `Mesh` object for immediate mode drawing.
 """
 function get_immediate_mesh()
-    global immediate_mesh
-    if immediate_mesh == nothing || immediate_mesh.vao == 0
-        @debug "Creating new immediate mesh"
-        immediate_mesh = create_mesh()
-    end
-    return immediate_mesh
-end
-
-"""
-    get_immediate_mesh_3d()
-
-Retrieves or creates the global 3D immediate mode mesh for drawing.
-
-# Returns
-The `Mesh` object for 3D immediate mode drawing.
-"""
-function get_immediate_mesh_3d()
-    global immediate_mesh_3d
-    if immediate_mesh_3d == nothing || immediate_mesh_3d.vao == 0
+    global the_immediate_mesh
+    if the_immediate_mesh == nothing || the_immediate_mesh.vao == 0
         @debug "Creating new immediate mesh 3D"
-        immediate_mesh_3d = create_3d_mesh()
+        the_immediate_mesh = create_mesh()
     end
-    return immediate_mesh_3d
+    return the_immediate_mesh
 end
 
 include("./meshes.jl")
@@ -1725,8 +1701,9 @@ The GLFW window object.
 # Throws
 - `error`: If GLFW initialization or window creation fails.
 """
-function initialize(;window_width::Int = 800, window_height::Int = 600)
-    # --- Initialization ---
+function initialize(;window_width::Int = 800,
+                    window_height::Int = 600,
+                    window_title::String = "Mirage")
     if !GLFW.Init()
         error("GLFW initialization failed")
         return -1
@@ -1740,7 +1717,7 @@ function initialize(;window_width::Int = 800, window_height::Int = 600)
     GLFW.WindowHint(GLFW.SAMPLES, 4)
 
     # Create a windowed mode window and its OpenGL context
-    window[] = GLFW.CreateWindow(window_width, window_height, "Mirage")
+    window[] = GLFW.CreateWindow(window_width, window_height, window_title)
     if window == C_NULL
         GLFW.Terminate()
         error("Failed to create GLFW window")
@@ -1812,8 +1789,6 @@ function start_render_loop(render::Function; wait_for_events::Bool = false)
             frame_count += 1
             clear()
             render()
-
-            # --- End Frame ---
             GLFW.SwapBuffers(window[])
             if wait_for_events
                 GLFW.WaitEvents()
@@ -1837,9 +1812,8 @@ end
 Runs a 2D test scene demonstrating various drawing functionalities like rectangles, circles, textures, and text.
 """
 function test_scene_2d()
-    initialize()
+    initialize(window_title = "Test Scene 2D")
 
-    # --- Load Assets ---
     # Example: Load a texture (provide a path to an actual image file)
     # Create a dummy texture if no file exists
     test_texture_id = GLuint(0)
@@ -1871,7 +1845,6 @@ function test_scene_2d()
         # Continue without texture
     end
 
-    # --- Create and Render Makie Plot to Texture ---
     #=
     makie_texture_id = GLuint(0)
     makie_plot_width_px = 300
@@ -1897,9 +1870,7 @@ function test_scene_2d()
         # Continue without the Makie plot texture
     end
     =#
-    # --- End Makie Plot ---
 
-    # --- Main Loop ---
     frame_count::Int64 = 0
     last_frame_time = time() # Initialize time measurement before the loop
     #circle = create_circle(100f0)
@@ -2006,7 +1977,6 @@ function test_scene_2d()
         stroke()
         restore()
 
-        # --- Draw the Makie plot texture ---
         #=
         if makie_texture_id != 0
         # Position it, e.g., top-right corner with a margin
@@ -2025,7 +1995,7 @@ end
 Runs a 3D test scene demonstrating various 3D drawing functionalities and camera controls.
 """
 function test_scene_3d()
-    initialize()
+    initialize(window_title = "Test Scene 3D")
 
     frame_count::Int64 = 0
 
@@ -2257,7 +2227,6 @@ export
     circle,
     Mesh,
     create_mesh,
-    create_3d_mesh,
     update_mesh_vertices,
     draw_mesh,
     RenderContext,

@@ -30,18 +30,13 @@ mutable struct Mesh
 end
 
 get_default_attributes() = [
-    VertexAttribute(0, 2, GL_FLOAT, false, 0),
-    VertexAttribute(1, 2, GL_FLOAT, false, 2 * sizeof(Float32))
-]
-
-get_default_3d_attributes() = [
     VertexAttribute(0, 3, GL_FLOAT, false, 0),                    # Position (x, y, z)
     VertexAttribute(1, 2, GL_FLOAT, false, 3 * sizeof(Float32)),  # Texture coordinates (u, v)
     VertexAttribute(2, 3, GL_FLOAT, false, 5 * sizeof(Float32))   # Normal (nx, ny, nz)
 ]
 
 """
-    create_mesh(vertices::Vector{T} = Float32[0, 0, 0, 0],
+    create_mesh(vertices::Vector{T} = Float32[0, 0, 0, 0, 0, 0, 0, 0],
                 attributes::Vector{VertexAttribute} = get_default_attributes();
                 draw_mode::GLenum = GL_TRIANGLES) where T
 
@@ -55,7 +50,7 @@ Creates a new `Mesh` object and uploads vertex data to the GPU.
 # Returns
 A new `Mesh` object.
 """
-function create_mesh(vertices::Vector{T} = Float32[0, 0, 0, 0],
+function create_mesh(vertices::Vector{T} = Float32[0, 0, 0, 0, 0, 0, 0, 0],
                      attributes::Vector{VertexAttribute} = get_default_attributes();
                      draw_mode::GLenum = GL_TRIANGLES) where T
 
@@ -104,22 +99,6 @@ function create_mesh(vertices::Vector{T} = Float32[0, 0, 0, 0],
         stride,
         attributes
     )
-end
-
-"""
-    create_3d_mesh(vertices::Vector{Float32} = Float32[0, 0, 0, 0, 0, 0, 0, 0]; kwargs...)
-
-Creates a new 3D `Mesh` object with default 3D attributes and uploads vertex data to the GPU.
-
-# Arguments
-- `vertices`: A vector of vertex data. Expected format is `[x, y, z, u, v, nx, ny, nz, ...]`. Defaults to a single dummy vertex.
-- `kwargs...`: Additional keyword arguments passed to `create_mesh` (e.g., `draw_mode`).
-
-# Returns
-A new `Mesh` object configured for 3D rendering.
-"""
-function create_3d_mesh(vertices::Vector{Float32} = Float32[0, 0, 0, 0, 0, 0, 0, 0]; kwargs...)
-    return create_mesh(vertices, get_default_3d_attributes(); kwargs...)
 end
 
 """
@@ -410,7 +389,7 @@ function create_cube(size::Number = 1.0)
          s, -s,  s, 1, 1, 0, -1, 0
     ]
 
-    return create_3d_mesh(vertices)
+    return create_mesh(vertices)
 end
 
 """
@@ -483,7 +462,7 @@ function create_uv_sphere(radius::Number = 1.0, u_segments::Int = 32, v_segments
         end
     end
 
-    return create_3d_mesh(vertices)
+    return create_mesh(vertices)
 end
 
 """
@@ -564,5 +543,5 @@ function load_obj_mesh(filepath::String)
         end
     end
     
-    return create_3d_mesh(vertices)
+    return create_mesh(vertices)
 end
