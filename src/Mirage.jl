@@ -419,6 +419,10 @@ function set_uniform(shader::ShaderInfo, name::String, value::Float32)
     glUniform1f(get(shader.uniform_locations, name, -1), value)
 end
 
+function set_uniform(shader::ShaderInfo, name::String, value::UInt32)
+    glUniform1i(get(shader.uniform_locations, name, -1), value)
+end
+
 function set_uniform(shader::ShaderInfo, name::String, value::Vector{Float32})
     loc = get(shader.uniform_locations, name, -1)
     if length(value) == 3
