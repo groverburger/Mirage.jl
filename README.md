@@ -1,6 +1,6 @@
 # Mirage.jl
 
-[![built with julia](https://julialang.org/assets/infra/built-with-julia-logo-dark.svg)](https://julialang.org)
+[![built with Julia](https://img.shields.io/badge/built%20with-Julia-9558B2.svg?logo=julia&logoColor=white)](https://julialang.org)
 
 Mirage.jl is a hardware-accelerated 2D and 3D graphics library for Julia. It provides a simple, user-friendly API for creating interactive graphics applications, games, and data visualizations. By leveraging the power of OpenGL, Mirage.jl delivers high performance for real-time rendering tasks.
 
@@ -23,7 +23,7 @@ Once you have Julia installed, you can add Mirage.jl as a dependency to your pro
 First, start the Julia REPL by typing `julia` in your terminal. Then, press `]` to enter the package manager.
 
 ```julia
-(@v1.10) pkg> add Mirage
+pkg> add Mirage
 ```
 
 ## Usage
