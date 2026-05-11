@@ -31,35 +31,35 @@ pkg> add Mirage
 Here is a simple example of how to create a window and draw a rotating square:
 
 ```julia
-using Mirage
+import Mirage
 
 function main()
-    initialize(window_width=800, window_height=600)
+    Mirage.initialize(window_width=800, window_height=600)
 
-    start_render_loop(function()
+    Mirage.start_render_loop(function()
         # Clear the screen
-        clear()
+        Mirage.clear()
 
         # Save the current state
-        save()
+        Mirage.save()
 
         # Translate to the center of the screen
-        translate(400, 300)
+        Mirage.translate(400, 300)
 
         # Rotate the square
-        rotate(time())
+        Mirage.rotate(time())
 
         # Set the fill color to red
-        fillcolor(rgba(255, 0, 0))
+        Mirage.fillcolor(Mirage.rgba(255, 0, 0))
 
         # Draw a rectangle
-        rect(-50, -50, 100, 100)
+        Mirage.rect(-50, -50, 100, 100)
 
         # Fill the rectangle
-        fill()
+        Mirage.fill()
 
         # Restore the state
-        restore()
+        Mirage.restore()
     end)
 end
 
