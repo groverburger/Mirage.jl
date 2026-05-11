@@ -149,6 +149,10 @@ Generates a single OpenGL object (buffer, vertex array, or texture) using the pr
 The ID of the generated OpenGL object.
 """
 function gl_gen_one(gl_gen_fn)
+    # Drain any stale errors that accumulated from previous draw calls (which lack
+    # explicit error checking). glGenBuffers/Textures/VertexArrays cannot themselves
+    # generate GL_INVALID_OPERATION, so any pre-existing error would be a false positive.
+    while glGetError() != GL_NO_ERROR end
     id = GLuint[0]
     gl_gen_fn(1, id)
     gl_check_error("generating a buffer, array, or texture")
@@ -970,8 +974,8 @@ A new `RenderContext` instance.
         font_texture = load_texture(map(x -> x == 1 ? RGBA(1, 1, 1, 1) : RGBA(0, 0, 0, 0), default_font))
 
         glBindTexture(GL_TEXTURE_2D, blank_texture)
-        white_pixel = Float32[1.0, 1.0, 1.0, 1.0]
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1, 1, 0, GL_RGBA, GL_FLOAT, white_pixel)
+        white_pixel = UInt8[255, 255, 255, 255]
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, white_pixel)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
         glBindTexture(GL_TEXTURE_2D, 0)
