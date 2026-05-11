@@ -19,7 +19,19 @@ struct VertexAttribute
     offset::Int        # Byte offset within vertex
 end
 
-# Simplified mesh with just one VBO and no EBO
+"""
+    Mesh
+
+GPU-resident mesh data backed by a vertex array object and vertex buffer object.
+
+# Fields
+- `vao::GLuint`: OpenGL vertex array object ID.
+- `vbo::GLuint`: OpenGL vertex buffer object ID.
+- `vertex_count::Int`: Number of vertices to draw.
+- `draw_mode::GLenum`: OpenGL primitive type, such as `GL_TRIANGLES` or `GL_LINES`.
+- `stride::Int`: Byte stride between vertices.
+- `attributes::Vector{VertexAttribute}`: Vertex attribute layout used by the mesh.
+"""
 mutable struct Mesh
     vao::GLuint        # Vertex Array Object ID
     vbo::GLuint        # Vertex Buffer Object ID

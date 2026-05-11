@@ -391,7 +391,15 @@ const texture_fragment_shader_source = """
     }
 """
 
-# Simple struct to hold shader programs and uniform locations
+"""
+    ShaderInfo
+
+OpenGL shader program metadata.
+
+# Fields
+- `program_id::GLuint`: OpenGL shader program ID.
+- `uniform_locations::Dict{String, GLint}`: Cached uniform locations keyed by uniform name.
+"""
 struct ShaderInfo
     program_id::GLuint
     uniform_locations::Dict{String, GLint}
@@ -727,6 +735,19 @@ function load_texture(img_rgba::Matrix{Images.RGBA{Images.N0f8}})::GLuint
     return tex_id
 end
 
+"""
+    Canvas
+
+Offscreen render target backed by an OpenGL framebuffer, color texture, and
+depth/stencil renderbuffer.
+
+# Fields
+- `fbo::GLuint`: OpenGL framebuffer object ID.
+- `texture::GLuint`: OpenGL texture ID for the color attachment.
+- `rbo::GLuint`: OpenGL renderbuffer object ID for depth and stencil storage.
+- `width::Int`: Canvas width in pixels.
+- `height::Int`: Canvas height in pixels.
+"""
 mutable struct Canvas
     fbo::GLuint
     texture::GLuint
@@ -906,6 +927,21 @@ function destroy_texture!(texture_id::GLuint)
     gl_check_error("deleting texture")
 end
 
+"""
+    ContextState
+
+Current drawing state, including transforms, colors, stroke settings, and paths.
+
+# Fields
+- `transform::Matrix{Float32}`: Current model transformation matrix.
+- `view::Matrix{Float32}`: Current view matrix.
+- `projection::Matrix{Float32}`: Current projection matrix.
+- `fill_color::Tuple{Float32, Float32, Float32, Float32}`: Current fill color.
+- `stroke_color::Tuple{Float32, Float32, Float32, Float32}`: Current stroke color.
+- `stroke_width::Float32`: Current stroke width.
+- `paths::Vector{Vector{Tuple{Float32, Float32, Float32}}}`: Current path geometry.
+- `current_path_index::Int`: Index of the active path.
+"""
 @kwdef mutable struct ContextState
     transform::Matrix{Float32} = Float32[1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 1]
     view::Matrix{Float32} = Float32[1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 1]
@@ -936,6 +972,24 @@ end
 
 include("./default_font.jl")
 
+"""
+    RenderContext
+
+Global rendering resources and drawing state for the active OpenGL context.
+
+# Fields
+- `shader::ShaderInfo`: Default texture shader.
+- `blank_texture::GLuint`: One-pixel white texture used for untextured drawing.
+- `font_texture::GLuint`: Texture atlas used by `text`.
+- `char_width::Float32`: Fixed-width font cell width in pixels.
+- `char_height::Float32`: Fixed-width font cell height in pixels.
+- `atlas_cols::Int`: Number of columns in the font atlas.
+- `atlas_rows::Int`: Number of rows in the font atlas.
+- `context_stack::Vector{ContextState}`: Saved drawing states.
+- `width::Int`: Current window or framebuffer width.
+- `height::Int`: Current window or framebuffer height.
+- `dpi_scaling::Number`: Framebuffer-to-window scaling factor.
+"""
 mutable struct RenderContext
     shader::ShaderInfo
     blank_texture::GLuint
@@ -979,7 +1033,7 @@ A new `RenderContext` instance.
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
         glBindTexture(GL_TEXTURE_2D, 0)
-        char_width, char_height = 8.0f0, 14.0f0 # Pixel dimensions of a character cell
+        char_width, char_height = 8.0f0, 16.0f0 # Pixel dimensions of a character cell
         atlas_cols, atlas_rows = 16, 6
 
         return new(
@@ -1185,7 +1239,7 @@ end
 Sets the fill color for subsequent drawing operations using an RGB tuple. The alpha component is set to 1.
 
 # Arguments
-- `tuple`: A tuple `(r, g, b)` where `r`, `g`, `b` are color components (0-1 or 0-255).
+- `tuple`: A tuple `(r, g, b)` where `r`, `g`, and `b` are used directly as color components.
 """
 function fillcolor(tuple::Tuple{Number, Number, Number})
     get_state().fill_color = (
@@ -1202,7 +1256,7 @@ end
 Sets the fill color for subsequent drawing operations using an RGBA tuple.
 
 # Arguments
-- `tuple`: A tuple `(r, g, b, a)` where `r`, `g`, `b`, `a` are color components (0-1 or 0-255).
+- `tuple`: A tuple `(r, g, b, a)` where each value is used directly as a color component.
 """
 function fillcolor(tuple::Tuple{Number, Number, Number, Number})
     get_state().fill_color = (
@@ -1219,7 +1273,7 @@ end
 Sets the stroke color for subsequent drawing operations using an RGB tuple. The alpha component is set to 1.
 
 # Arguments
-- `tuple`: A tuple `(r, g, b)` where `r`, `g`, `b` are color components (0-1 or 0-255).
+- `tuple`: A tuple `(r, g, b)` where `r`, `g`, and `b` are used directly as color components.
 """
 function strokecolor(tuple::Tuple{Number, Number, Number})
     get_state().stroke_color = (
@@ -1236,7 +1290,7 @@ end
 Sets the stroke color for subsequent drawing operations using an RGBA tuple.
 
 # Arguments
-- `tuple`: A tuple `(r, g, b, a)` where `r`, `g`, `b`, `a` are color components (0-1 or 0-255).
+- `tuple`: A tuple `(r, g, b, a)` where each value is used directly as a color component.
 """
 function strokecolor(tuple::Tuple{Number, Number, Number, Number})
     get_state().stroke_color = (
@@ -1472,8 +1526,8 @@ Defines a circular path.
 
 # Arguments
 - `r`: The radius of the circle.
-- `x`: The x-coordinate of the center of the circle (defaults to 0).
-- `y`: The y-coordinate of the center of the circle (defaults to 0).
+- `x`: Currently unused.
+- `y`: Currently unused.
 - `segments`: The number of line segments used to approximate the circle (defaults to 32).
 """
 function circle(r::Number, x::Number = 0, y::Number = 0, segments::Int = 32)
@@ -1695,13 +1749,14 @@ function clear()
 end
 
 """
-    initialize(;window_width::Int = 800, window_height::Int = 600)
+    initialize(;window_width::Int = 800, window_height::Int = 600, window_title::String = "Mirage")
 
 Initializes GLFW and OpenGL, creates a window, and sets up the rendering context.
 
 # Arguments
 - `window_width`: The desired width of the window (defaults to 800).
 - `window_height`: The desired height of the window (defaults to 600).
+- `window_title`: The window title (defaults to `"Mirage"`).
 
 # Returns
 The GLFW window object.
@@ -2235,12 +2290,10 @@ export
     circle,
     Mesh,
     create_mesh,
-    update_mesh_vertices,
     draw_mesh,
     RenderContext,
     set_render_context,
     initialize_render_context,
-    update_projection_matrix,
     load_texture,
     initialize,
     start_render_loop,
