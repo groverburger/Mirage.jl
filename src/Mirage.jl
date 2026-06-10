@@ -663,13 +663,15 @@ Also sets the OpenGL viewport.
 - `dpi_scaling`: The DPI scaling factor (defaults to `get_context().dpi_scaling`).
 - `near`: The distance to the near clipping plane (defaults to 0.01).
 - `far`: The distance to the far clipping plane (defaults to 10_000).
+- `fov`: The field of view (FOV) of the camera (defaults to pi / 4).
 """
 function update_perspective_projection_matrix(width=get_context().width,
                                               height=get_context().height,
                                               dpi_scaling=get_context().dpi_scaling;
                                               near = 0.01,
-                                              far = 10_000)
-    get_state().projection = perspective(Float32(pi / 4), Float32(width / height), Float32(near), Float32(far))
+                                              far = 10_000,
+                                              fov = pi / 4)
+    get_state().projection = perspective(Float32(fov), Float32(width / height), Float32(near), Float32(far))
     glViewport(0, 0, width, height)
 end
 
