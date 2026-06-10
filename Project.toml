@@ -16,3 +16,10 @@ FileIO = "1.17.0"
 ImageIO = "0.6.9"
 Images = "0.26.2"
 Revise = "3.12.3"
+
+[extras]
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["LinearAlgebra", "Test"]
